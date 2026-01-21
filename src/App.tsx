@@ -5,6 +5,7 @@ import MembersList from './pages/MembersList';
 import MemberDetail from './pages/MemberDetail';
 import Attendance from './pages/Attendance';
 import Payments from './pages/Payments';
+import Subscriptions from './pages/Subscriptions';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
           <Route path="members/:id" element={<MemberDetail />} />
           <Route path="attendance" element={<Attendance />} />
           <Route path="payments" element={<Payments />} />
+          <Route path="subscriptions" element={<Subscriptions />} />
         </Route>
       </Routes>
     </Router>

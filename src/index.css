@@ -6,6 +6,12 @@
   html {
     font-family: 'Inter', sans-serif;
   }
+
+  input,
+  textarea,
+  select {
+    @apply text-gray-900;
+  }
 }
 
 body {

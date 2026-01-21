@@ -1,6 +1,52 @@
 import { supabase } from '../supabase';
 import type { Member, Subscription, Payment, Attendance } from '../../types';
 
+// Helper to map DB Member to Frontend Member
+const mapMember = (data: any): Member => ({
+    id: data.id,
+    fullName: data.full_name,
+    email: data.email,
+    phone: data.phone,
+    gender: data.gender,
+    dateOfBirth: data.date_of_birth,
+    address: data.address,
+    info: data.info,
+    joinDate: data.join_date,
+    status: data.status,
+    imageUrl: data.image_url
+});
+
+// Helper to map DB Subscription
+const mapSubscription = (data: any): Subscription => ({
+    id: data.id,
+    memberId: data.member_id,
+    planName: data.plan_name,
+    price: data.price,
+    startDate: data.start_date,
+    endDate: data.end_date,
+    isActive: data.is_active
+});
+
+// Helper to map DB Payment
+const mapPayment = (data: any): Payment => ({
+    id: data.id,
+    memberId: data.member_id,
+    amount: data.amount,
+    date: data.date,
+    method: data.method,
+    adminNote: data.admin_note
+});
+
+// Helper to map DB Attendance
+const mapAttendance = (data: any): Attendance => ({
+    id: data.id,
+    memberId: data.member_id,
+    date: data.date,
+    checkInTime: data.check_in_time,
+    checkOutTime: data.check_out_time,
+    method: data.method
+});
+
 export const getMembers = async (searchQuery: string = '', statusFilter: 'all' | 'active' | 'expired' | 'inactive' = 'all') => {
     let query = supabase.from('members').select('*').order('created_at', { ascending: false });
 
@@ -14,7 +60,7 @@ export const getMembers = async (searchQuery: string = '', statusFilter: 'all' |
 
     const { data, error } = await query;
     if (error) throw error;
-    return data as Member[];
+    return (data || []).map(mapMember);
 };
 
 export const getMemberById = async (id: string) => {
@@ -25,7 +71,7 @@ export const getMemberById = async (id: string) => {
         .single();
 
     if (error) throw error;
-    return data as Member;
+    return mapMember(data);
 };
 
 export const getMemberHistory = async (id: string) => {
@@ -36,9 +82,9 @@ export const getMemberHistory = async (id: string) => {
     ]);
 
     return {
-        subscriptions: subscriptions.data as Subscription[] || [],
-        payments: payments.data as Payment[] || [],
-        attendance: attendance.data as Attendance[] || [],
+        subscriptions: (subscriptions.data || []).map(mapSubscription),
+        payments: (payments.data || []).map(mapPayment),
+        attendance: (attendance.data || []).map(mapAttendance),
     };
 };
 
@@ -106,19 +152,21 @@ export const createMemberWithSubscription = async (
         throw payError;
     }
 
-    return member;
+    return mapMember(member);
 };
 
 export const updateMember = async (id: string, updates: Partial<Member>) => {
-    const { error } = await supabase.from('members').update({
-        full_name: updates.fullName,
-        phone: updates.phone,
-        gender: updates.gender,
-        date_of_birth: updates.dateOfBirth,
-        address: updates.address,
-        info: updates.info,
-        status: updates.status,
-    }).eq('id', id);
+    const dbUpdates: any = {};
+    if (updates.fullName) dbUpdates.full_name = updates.fullName;
+    if (updates.phone) dbUpdates.phone = updates.phone;
+    if (updates.gender) dbUpdates.gender = updates.gender;
+    if (updates.dateOfBirth) dbUpdates.date_of_birth = updates.dateOfBirth;
+    if (updates.address) dbUpdates.address = updates.address;
+    if (updates.info) dbUpdates.info = updates.info;
+    if (updates.status) dbUpdates.status = updates.status;
+    if (updates.imageUrl) dbUpdates.image_url = updates.imageUrl;
+
+    const { error } = await supabase.from('members').update(dbUpdates).eq('id', id);
 
     if (error) throw error;
 };

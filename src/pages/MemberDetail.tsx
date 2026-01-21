@@ -5,6 +5,8 @@ import { getMemberById, getMemberHistory } from '../lib/api/members';
 import type { Member, Subscription, Payment, Attendance } from '../types';
 import { clsx } from 'clsx';
 
+import { AddSubscriptionModal } from '../components/members/AddSubscriptionModal';
+
 const MemberDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
@@ -16,21 +18,23 @@ const MemberDetail: React.FC = () => {
     }>({ subscriptions: [], payments: [], attendance: [] });
     const [activeTab, setActiveTab] = useState<'profile' | 'subscriptions' | 'payments' | 'attendance'>('profile');
     const [loading, setLoading] = useState(true);
+    const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
+
+    const loadData = async () => {
+        if (!id) return;
+        try {
+            const memberData = await getMemberById(id);
+            const historyData = await getMemberHistory(id);
+            setMember(memberData);
+            setHistory(historyData);
+        } catch (error) {
+            console.error("Failed to load member detail", error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        if (!id) return;
-        const loadData = async () => {
-            try {
-                const memberData = await getMemberById(id);
-                const historyData = await getMemberHistory(id);
-                setMember(memberData);
-                setHistory(historyData);
-            } catch (error) {
-                console.error("Failed to load member detail", error);
-            } finally {
-                setLoading(false);
-            }
-        };
         loadData();
     }, [id]);
 
@@ -64,7 +68,12 @@ const MemberDetail: React.FC = () => {
                 </div>
                 <div className="flex gap-2">
                     <button className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Edit Profile</button>
-                    <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Renew Plan</button>
+                    <button
+                        onClick={() => setIsRenewModalOpen(true)}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                    >
+                        Renew Plan
+                    </button>
                 </div>
             </div>
 
@@ -134,6 +143,16 @@ const MemberDetail: React.FC = () => {
                     )}
                 </div>
             </div>
+
+            <AddSubscriptionModal
+                isOpen={isRenewModalOpen}
+                onClose={() => setIsRenewModalOpen(false)}
+                onSuccess={() => {
+                    loadData(); // Refresh data
+                    setActiveTab('subscriptions'); // Switch to subs tab
+                }}
+                memberId={id || ''}
+            />
         </div>
     );
 };

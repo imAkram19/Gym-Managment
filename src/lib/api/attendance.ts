@@ -62,8 +62,17 @@ export const checkInMember = async (identifier: string, method: 'manual' | 'fing
     }
 
     // 3. Log Attendance
-    // Check if already checked in today? (Optional, but good practice)
-    // For now, allow multiple check-ins or just log it.
+    // Check if identifying duplicate check-in
+    const { data: existingCheckIn } = await supabase
+        .from('attendance')
+        .select('id')
+        .eq('member_id', member.id)
+        .eq('date', today)
+        .maybeSingle();
+
+    if (existingCheckIn) {
+        throw new Error(`Member ${member.full_name} is already checked in for today.`);
+    }
 
     const { error: insertError } = await supabase
         .from('attendance')

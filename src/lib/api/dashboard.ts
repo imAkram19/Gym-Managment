@@ -67,16 +67,44 @@ export const getRecentActivity = async () => {
 };
 
 // Mock data generator for the chart until we have enough real data
+// Fetch revenue for the last 7 days
 export const getRevenueData = async () => {
-    // In a real app, we would group 'payments' by date.
-    // For now, let's return static data or fetch minimal real data.
-    return [
-        { name: 'Mon', revenue: 400 },
-        { name: 'Tue', revenue: 300 },
-        { name: 'Wed', revenue: 550 },
-        { name: 'Thu', revenue: 450 },
-        { name: 'Fri', revenue: 600 },
-        { name: 'Sat', revenue: 800 },
-        { name: 'Sun', revenue: 200 },
-    ];
+    const today = new Date();
+    const last7Days: string[] = [];
+    const chartData: { name: string; revenue: number; dateStr: string }[] = [];
+
+    // 1. Generate last 7 days array
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(today.getDate() - i);
+        const dateStr = d.toISOString().split('T')[0]; // YYYY-MM-DD
+        const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+
+        last7Days.push(dateStr);
+        chartData.push({ name: dayName, revenue: 0, dateStr });
+    }
+
+    // 2. Fetch payments from DB
+    const startDate = last7Days[0];
+    const { data: payments, error } = await supabase
+        .from('payments')
+        .select('amount, date')
+        .gte('date', startDate);
+
+    if (error) {
+        console.error('Error fetching revenue chart data:', error);
+        return chartData.map(({ name, revenue }) => ({ name, revenue }));
+    }
+
+    // 3. Aggregate data
+    payments?.forEach((payment: any) => {
+        const paymentDate = payment.date; // YYYY-MM-DD
+        const dayEntry = chartData.find(d => d.dateStr === paymentDate);
+        if (dayEntry) {
+            dayEntry.revenue += Number(payment.amount);
+        }
+    });
+
+    // 4. Return formatted data
+    return chartData.map(({ name, revenue }) => ({ name, revenue }));
 };
