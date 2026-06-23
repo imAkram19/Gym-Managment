@@ -101,27 +101,62 @@ async function deleteUserFromDevice(userId) {
     try {
         if (!zkInstance) throw new Error('ZK device not connected.');
         
-        // Find user in cache to get their uid
-        await refreshDeviceUsersCache();
+        // Find user in cache to get their uid (internal record number)
+        await refreshDeviceUsersCache(true); // Force refresh to get latest state
         const deviceUser = deviceUsersCache.find(u => parseInt(u.userId, 10) === parseInt(userId, 10));
         if (!deviceUser) {
-            console.log(`[-] User ID ${userId} not found on device memory cache.`);
+            console.log(`[-] User ID ${userId} not found on device memory — already deleted or never enrolled.`);
             return true; // Already deleted/not present
         }
 
         const uid = deviceUser.uid;
+        console.log(`[Device Control] Found user "${deviceUser.name || userId}" with internal UID=${uid}. Deleting...`);
+
+        // Step 1: Disable device to prevent interference during deletion
+        try {
+            await zkInstance.disableDevice();
+            console.log(`[Device Control] Device disabled for safe deletion.`);
+        } catch (disableErr) {
+            console.warn(`[Device Control] Warning: Could not disable device:`, disableErr.message);
+            // Continue anyway — some firmware versions don't require this
+        }
+
+        // Step 2: Send CMD_DELETE_USER (command 18) with UID as 2-byte LE integer
         const payload = Buffer.alloc(2);
         payload.writeUInt16LE(uid, 0);
-
-        // Command code 18 is CMD_DELETE_USER
         await zkInstance.executeCmd(18, payload);
-        console.log(`[✔] Successfully deleted User ID ${userId} (UID: ${uid}) from device memory.`);
-        
-        // Remove from cache
-        deviceUsersCache = deviceUsersCache.filter(u => parseInt(u.userId, 10) !== parseInt(userId, 10));
+        console.log(`[Device Control] CMD_DELETE_USER sent for UID=${uid}.`);
+
+        // Step 3: Refresh device data to apply changes
+        try {
+            await zkInstance.executeCmd(1013, ''); // CMD_REFRESHDATA = 1013
+            console.log(`[Device Control] Device data refreshed.`);
+        } catch (refreshErr) {
+            console.warn(`[Device Control] Warning: Could not refresh device data:`, refreshErr.message);
+        }
+
+        // Step 4: Re-enable device
+        try {
+            await zkInstance.enableDevice();
+            console.log(`[Device Control] Device re-enabled.`);
+        } catch (enableErr) {
+            console.warn(`[Device Control] Warning: Could not re-enable device:`, enableErr.message);
+        }
+
+        // Step 5: Verify deletion by refreshing cache and checking
+        await refreshDeviceUsersCache(true);
+        const stillExists = deviceUsersCache.some(u => parseInt(u.userId, 10) === parseInt(userId, 10));
+        if (stillExists) {
+            console.error(`[!] WARNING: User ID ${userId} still exists on device after CMD_DELETE_USER! Deletion may have failed.`);
+            return false;
+        }
+
+        console.log(`[✔] Successfully deleted User ID ${userId} (UID: ${uid}) from device memory. Fingerprint removed.`);
         return true;
     } catch (err) {
         console.error(`[-] Failed to delete user ID ${userId} from device:`, err.message || err);
+        // Try to re-enable device even on error
+        try { await zkInstance.enableDevice(); } catch (e) {}
         return false;
     }
 }
@@ -129,11 +164,11 @@ async function deleteUserFromDevice(userId) {
 // Biometric enrollment status sync loop
 async function syncBiometricEnrollments() {
     try {
-        // Query enrollments that need actions
+        // Query enrollments that need actions (including 'deleted' for verification)
         const { data: enrollments, error } = await supabase
             .from('biometric_enrollments')
             .select('id, device_user_id, sync_status, member_id')
-            .in('sync_status', ['needs_deletion', 'needs_enrollment']);
+            .in('sync_status', ['needs_deletion', 'needs_enrollment', 'deleted']);
 
         if (error) throw error;
         if (!enrollments || enrollments.length === 0) return;
@@ -149,6 +184,24 @@ async function syncBiometricEnrollments() {
                         .update({ sync_status: 'deleted' })
                         .eq('id', enrollment.id);
                     if (updateErr) console.error('[-] Failed to update sync_status to deleted:', updateErr.message);
+                }
+            } else if (enrollment.sync_status === 'deleted') {
+                // Safety check: verify user is actually removed from the physical device
+                // This handles cases where the initial CMD_DELETE_USER silently failed
+                if (!ZK_SIMULATE) {
+                    await refreshDeviceUsersCache(true);
+                    const stillOnDevice = deviceUsersCache.some(u => parseInt(u.userId, 10) === parseInt(userId, 10));
+                    if (stillOnDevice) {
+                        console.warn(`[!] User ID ${userId} marked as 'deleted' in DB but still exists on device! Retrying deletion...`);
+                        const deleted = await deleteUserFromDevice(userId);
+                        if (!deleted) {
+                            // Reset status so it will be retried next cycle
+                            await supabase
+                                .from('biometric_enrollments')
+                                .update({ sync_status: 'needs_deletion' })
+                                .eq('id', enrollment.id);
+                        }
+                    }
                 }
             } else if (enrollment.sync_status === 'needs_enrollment') {
                 // Check if user is now enrolled on device memory
