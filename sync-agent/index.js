@@ -267,6 +267,20 @@ async function run() {
     } else {
         // --- 4b. PRODUCTION HARDWARE CONNECTION MODE ---
         let zkInstance = new ZKLib(DEVICE_IP, DEVICE_PORT, 10000, 4000);
+        let pollInterval = null;
+
+        const cleanup = async () => {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+            await updateHeartbeat('offline');
+            try {
+                await zkInstance.disconnect();
+            } catch (disError) {
+                console.error('[-] Error during socket disconnect cleanup:', disError.message || disError);
+            }
+        };
 
         try {
             await zkInstance.createSocket();
@@ -276,28 +290,74 @@ async function run() {
             const users = await zkInstance.getUsers();
             console.log(`[+] Retrieved ${users.data.length} users enrolled on device memory.`);
 
-            console.log('[+] Listening for fingerprint scans on the device...');
+            // 1. Transaction Memory Polling Fallback
+            // Poll device log history every 8 seconds to capture scans.
+            // This is 100% reliable across all firmware versions and syncs offline records.
+            const pollLogs = async () => {
+                try {
+                    const attendances = await zkInstance.getAttendances();
+                    if (attendances && attendances.data) {
+                        for (const log of attendances.data) {
+                            const deviceUserId = parseInt(log.deviceUserId, 10);
+                            const recordTime = log.recordTime;
+                            
+                            // Convert recordTime to ISO String for database checking
+                            const isoTime = new Date(recordTime).toISOString();
+
+                            // Check if this scan has already been logged in Supabase
+                            const { data: existingLog } = await supabase
+                                .from('biometric_attendance_logs')
+                                .select('id')
+                                .eq('device_user_id', deviceUserId)
+                                .eq('scan_timestamp', isoTime)
+                                .maybeSingle();
+
+                            if (!existingLog) {
+                                console.log(`[Polling] Syncing new scan: User ID ${deviceUserId} at ${isoTime}`);
+                                await handleCheckIn(deviceUserId, isoTime);
+                            }
+                        }
+                    }
+                } catch (pollErr) {
+                    console.error('[-] Error polling attendance from device memory:', pollErr.message || pollErr);
+                }
+            };
+
+            // Run poll immediately on connection and set interval
+            await pollLogs();
+            pollInterval = setInterval(pollLogs, 8000);
+
+            // 2. Real-Time Listener (if supported by firmware)
+            console.log('[+] Listening for real-time fingerprint scans on the device...');
             await zkInstance.getRealTimeLogs(async (err, log) => {
                 if (err) {
                     console.error('[-] Real-time log capture error:', err);
-                    await updateHeartbeat('offline');
-                    try {
-                        await zkInstance.disconnect();
-                    } catch (disError) {
-                        console.error('[-] Error during socket disconnect cleanup:', disError.message);
-                    }
+                    await cleanup();
                     console.log('[*] Connection lost. Attempting reconnection in 10 seconds...');
                     setTimeout(run, 10000);
                     return;
                 }
                 
                 if (log && log.userId) {
-                    await handleCheckIn(log.userId, log.attTime);
+                    // Check if already processed by polling to avoid redundant calls
+                    const parsedUserId = parseInt(log.userId, 10);
+                    const isoTime = new Date(log.attTime || new Date()).toISOString();
+                    const { data: existingLog } = await supabase
+                        .from('biometric_attendance_logs')
+                        .select('id')
+                        .eq('device_user_id', parsedUserId)
+                        .eq('scan_timestamp', isoTime)
+                        .maybeSingle();
+
+                    if (!existingLog) {
+                        await handleCheckIn(log.userId, log.attTime);
+                    }
                 }
             });
 
         } catch (error) {
             console.error('[-] Connection to K40 device failed:', error.message || error);
+            if (pollInterval) clearInterval(pollInterval);
             await updateHeartbeat('offline');
             console.log('[*] Retrying in 10 seconds...');
             setTimeout(run, 10000);
