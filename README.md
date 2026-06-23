@@ -87,8 +87,8 @@ RLS is enabled on all PostgreSQL tables. While public access policies are config
 
 ---
 
-## 🚀 Production Deployment to Hyderabad Gym
-To deploy the biometric sync agent in Hyderabad:
+## 🚀 Production Deployment to Iron Gym
+To deploy the biometric sync agent in Iron Gym:
 1. Install Node.js on the gym's reception PC.
 2. Copy the `sync-agent/` directory to the PC.
 3. Configure `ZK_SIMULATE=false` in its `.env`.

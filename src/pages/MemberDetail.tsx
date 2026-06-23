@@ -6,8 +6,11 @@ import { getEnrollmentByMemberId, enrollMemberBiometrics, deleteBiometricEnrollm
 import { expireSubscription } from '../lib/api/subscriptions';
 import type { Member, Subscription, Payment, Attendance, BiometricEnrollment } from '../types';
 import { clsx } from 'clsx';
+import { supabase } from '../lib/supabase';
 
 import { AddSubscriptionModal } from '../components/members/AddSubscriptionModal';
+import { EditMemberModal } from '../components/members/EditMemberModal';
+import { ExtendMembershipModal } from '../components/members/ExtendMembershipModal';
 
 const MemberDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -21,12 +24,117 @@ const MemberDetail: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'profile' | 'subscriptions' | 'payments' | 'attendance'>('profile');
     const [loading, setLoading] = useState(true);
     const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isExtendModalOpen, setIsExtendModalOpen] = useState(false);
 
     // Biometric States
     const [enrollment, setEnrollment] = useState<BiometricEnrollment | null>(null);
     const [deviceUserIdInput, setDeviceUserIdInput] = useState('');
     const [biometricLoading, setBiometricLoading] = useState(false);
     const [biometricError, setBiometricError] = useState('');
+
+    const handleForceExpire = async () => {
+        if (!confirm('Are you sure you want to FORCE EXPIRE this membership immediately? This will disable door access and mark the biometric enrollment for deletion.')) return;
+        setLoading(true);
+        try {
+            // Update member status
+            const { error: memberError } = await supabase
+                .from('members')
+                .update({ status: 'expired' })
+                .eq('id', id);
+            if (memberError) throw memberError;
+
+            // Set all active subscriptions of this member to inactive and end_date to yesterday
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+            const { error: subError } = await supabase
+                .from('subscriptions')
+                .update({ is_active: false, end_date: yesterdayStr })
+                .eq('member_id', id)
+                .eq('is_active', true);
+            if (subError) throw subError;
+
+            // Trigger sync
+            const { error: syncError } = await supabase.rpc('sync_member_statuses');
+            if (syncError) console.error('Failed to sync member statuses:', syncError);
+
+            await loadData();
+            alert('Membership force expired successfully. Biometric deletion command sent.');
+        } catch (err: any) {
+            console.error(err);
+            alert(err.message || 'Failed to force expire membership');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleActivate = async () => {
+        if (!confirm('Are you sure you want to ACTIVATE this membership?')) return;
+        setLoading(true);
+        try {
+            // Update member status to active
+            const { error: memberError } = await supabase
+                .from('members')
+                .update({ status: 'active' })
+                .eq('id', id);
+            if (memberError) throw memberError;
+
+            // If there's a latest subscription, activate it and set end date to a future date if expired
+            const latestSub = history.subscriptions[0];
+            if (latestSub) {
+                const today = new Date();
+                const endDate = new Date(latestSub.endDate);
+                let newEndDate = latestSub.endDate;
+                
+                if (endDate < today) {
+                    const futureDate = new Date();
+                    futureDate.setMonth(futureDate.getMonth() + 1);
+                    newEndDate = futureDate.toISOString().split('T')[0];
+                }
+
+                const { error: subError } = await supabase
+                    .from('subscriptions')
+                    .update({
+                        is_active: true,
+                        end_date: newEndDate,
+                        start_date: today.toISOString().split('T')[0]
+                    })
+                    .eq('id', latestSub.id);
+                if (subError) throw subError;
+            } else {
+                // If they have no subscription, insert a default monthly subscription
+                const today = new Date();
+                const futureDate = new Date();
+                futureDate.setMonth(futureDate.getMonth() + 1);
+
+                const { error: subError } = await supabase
+                    .from('subscriptions')
+                    .insert([{
+                        member_id: id,
+                        plan_name: 'Monthly',
+                        price: 1000,
+                        start_date: today.toISOString().split('T')[0],
+                        end_date: futureDate.toISOString().split('T')[0],
+                        is_active: true
+                    }]);
+                if (subError) throw subError;
+            }
+
+            // Trigger sync
+            const { error: syncError } = await supabase.rpc('sync_member_statuses');
+            if (syncError) console.error('Failed to sync member statuses:', syncError);
+
+            await loadData();
+            alert('Membership activated successfully.');
+        } catch (err: any) {
+            console.error(err);
+            alert(err.message || 'Failed to activate membership');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const loadData = async () => {
         if (!id) return;
@@ -116,11 +224,39 @@ const MemberDetail: React.FC = () => {
                         </span>
                     </div>
                 </div>
-                <div className="flex gap-2">
-                    <button className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Edit Profile</button>
+                <div className="flex flex-wrap gap-2 md:self-center">
+                    <button 
+                        onClick={() => setIsEditModalOpen(true)}
+                        className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-semibold transition-colors"
+                    >
+                        Edit Profile
+                    </button>
+                    {history.subscriptions.length > 0 && (
+                        <button 
+                            onClick={() => setIsExtendModalOpen(true)}
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold transition-colors"
+                        >
+                            Extend Membership
+                        </button>
+                    )}
+                    {member.status === 'active' ? (
+                        <button 
+                            onClick={handleForceExpire}
+                            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold transition-colors"
+                        >
+                            Force Expire
+                        </button>
+                    ) : (
+                        <button 
+                            onClick={handleActivate}
+                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors"
+                        >
+                            Activate Membership
+                        </button>
+                    )}
                     <button
                         onClick={() => setIsRenewModalOpen(true)}
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold transition-colors"
                     >
                         Renew Plan
                     </button>
@@ -340,6 +476,26 @@ const MemberDetail: React.FC = () => {
                 }}
                 memberId={id || ''}
             />
+
+            {member && (
+                <EditMemberModal
+                    isOpen={isEditModalOpen}
+                    onClose={() => setIsEditModalOpen(false)}
+                    onSuccess={loadData}
+                    member={member}
+                    latestSubscription={history.subscriptions[0] || null}
+                />
+            )}
+
+            {history.subscriptions.length > 0 && (
+                <ExtendMembershipModal
+                    isOpen={isExtendModalOpen}
+                    onClose={() => setIsExtendModalOpen(false)}
+                    onSuccess={loadData}
+                    subscriptionId={history.subscriptions[0].id}
+                    currentEndDate={history.subscriptions[0].endDate}
+                />
+            )}
         </div>
     );
 };

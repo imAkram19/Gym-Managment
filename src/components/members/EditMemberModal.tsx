@@ -1,18 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, User, Receipt } from 'lucide-react';
-import { createMemberWithSubscription } from '../../lib/api/members';
 import { supabase } from '../../lib/supabase';
+import type { Member, Subscription } from '../../types';
 
-interface AddMemberModalProps {
+interface EditMemberModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSuccess: () => void;
+    member: Member;
+    latestSubscription: Subscription | null;
 }
 
-export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose, onSuccess }) => {
+export const EditMemberModal: React.FC<EditMemberModalProps> = ({
+    isOpen,
+    onClose,
+    onSuccess,
+    member,
+    latestSubscription
+}) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    
+
     // Validation states
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -23,29 +31,33 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
 
     // Form State
     const [formData, setFormData] = useState({
-        fullName: '',
-        phone: '',
-        gender: 'male',
-        dateOfBirth: '',
-        address: '',
-        info: '',
+        fullName: member.fullName || '',
+        phone: member.phone || '',
+        gender: member.gender || 'male',
+        dateOfBirth: member.dateOfBirth || '',
+        address: member.address || '',
+        info: member.info || '',
+        status: member.status || 'active',
         // Subscription
-        planName: 'Monthly',
-        price: '',
-        durationMonths: 1,
-        startDate: new Date().toISOString().split('T')[0],
-        endDate: (() => {
-            const date = new Date();
-            date.setMonth(date.getMonth() + 1);
-            return date.toISOString().split('T')[0];
-        })(),
-        // Payment
-        initialPayment: '',
-        paymentMethod: 'cash',
-        adminNote: ''
+        planName: latestSubscription?.planName || 'Monthly',
+        price: latestSubscription ? String(latestSubscription.price) : '',
+        startDate: latestSubscription?.startDate || new Date().toISOString().split('T')[0],
+        endDate: latestSubscription?.endDate || new Date().toISOString().split('T')[0],
     });
 
-    // Run validations
+    // Detect common plan names
+    useEffect(() => {
+        if (latestSubscription) {
+            const plan = latestSubscription.planName;
+            if (['Monthly', 'Quarterly', 'Semi-Annually', 'Annually'].includes(plan)) {
+                setPlanNameSelect(plan);
+            } else {
+                setPlanNameSelect('Custom');
+            }
+        }
+    }, [latestSubscription]);
+
+    // Validation rules
     const validate = (data: typeof formData) => {
         const newErrors: Record<string, string> = {};
 
@@ -98,16 +110,6 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
             }
         }
 
-        // Duration
-        if (!data.durationMonths) {
-            newErrors.durationMonths = 'Duration is required';
-        } else {
-            const durationVal = Number(data.durationMonths);
-            if (isNaN(durationVal) || durationVal <= 0) {
-                newErrors.durationMonths = 'Duration must be greater than 0';
-            }
-        }
-
         // Start Date
         if (!data.startDate) {
             newErrors.startDate = 'Start Date is required';
@@ -120,23 +122,10 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
             newErrors.endDate = 'End Date must be greater than Start Date';
         }
 
-        // Initial Payment
-        if (data.initialPayment !== '') {
-            const initPay = Number(data.initialPayment);
-            const priceVal = Number(data.price) || 0;
-            if (isNaN(initPay)) {
-                newErrors.initialPayment = 'Initial Payment must be a valid number';
-            } else if (initPay < 0) {
-                newErrors.initialPayment = 'Initial Payment cannot be negative';
-            } else if (initPay > priceVal) {
-                newErrors.initialPayment = `Initial Payment cannot exceed plan price (₹${priceVal})`;
-            }
-        }
-
         return newErrors;
     };
 
-    // Check for duplicate phone number
+    // Check for duplicate phone number (excluding current member)
     useEffect(() => {
         const checkDuplicatePhone = async () => {
             if (/^\d{10}$/.test(formData.phone)) {
@@ -145,7 +134,8 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
                     const { data, error: dbError } = await supabase
                         .from('members')
                         .select('id')
-                        .eq('phone', formData.phone);
+                        .eq('phone', formData.phone)
+                        .neq('id', member.id);
                     
                     if (dbError) throw dbError;
                     
@@ -167,7 +157,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
         };
 
         checkDuplicatePhone();
-    }, [formData.phone]);
+    }, [formData.phone, member.id]);
 
     // Update validations on form change
     useEffect(() => {
@@ -191,17 +181,18 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
             const next = { ...prev };
             if (val !== 'Custom') {
                 next.planName = val;
-                // Set default duration
-                if (val === 'Monthly') next.durationMonths = 1;
-                else if (val === 'Quarterly') next.durationMonths = 3;
-                else if (val === 'Semi-Annually') next.durationMonths = 6;
-                else if (val === 'Annually') next.durationMonths = 12;
+                
+                // Recalculate end date based on selected standard plan
+                let durationMonths = 1;
+                if (val === 'Monthly') durationMonths = 1;
+                else if (val === 'Quarterly') durationMonths = 3;
+                else if (val === 'Semi-Annually') durationMonths = 6;
+                else if (val === 'Annually') durationMonths = 12;
 
-                // Recalculate end date
                 try {
                     const start = new Date(next.startDate);
                     if (!isNaN(start.getTime())) {
-                        start.setMonth(start.getMonth() + next.durationMonths);
+                        start.setMonth(start.getMonth() + durationMonths);
                         next.endDate = start.toISOString().split('T')[0];
                     }
                 } catch (err) {
@@ -220,26 +211,25 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
         setFormData(prev => {
             const nextState = { ...prev, [name]: value };
             
-            // Auto-update initial payment if price changes and is untouched or matches price
-            if (name === 'price') {
-                if (prev.initialPayment === '' || prev.initialPayment === prev.price) {
-                    nextState.initialPayment = value;
-                }
-            }
-
-            // Auto-calculate end date if duration or start date changes
-            if (name === 'startDate' || name === 'durationMonths') {
+            // If startDate changes and plan select is standard, recalculate end date
+            if (name === 'startDate' && planNameSelect !== 'Custom') {
                 try {
+                    let durationMonths = 1;
+                    if (planNameSelect === 'Monthly') durationMonths = 1;
+                    else if (planNameSelect === 'Quarterly') durationMonths = 3;
+                    else if (planNameSelect === 'Semi-Annually') durationMonths = 6;
+                    else if (planNameSelect === 'Annually') durationMonths = 12;
+
                     const start = new Date(nextState.startDate);
                     if (!isNaN(start.getTime())) {
-                        start.setMonth(start.getMonth() + Number(nextState.durationMonths));
+                        start.setMonth(start.getMonth() + durationMonths);
                         nextState.endDate = start.toISOString().split('T')[0];
                     }
                 } catch (err) {
                     // ignore
                 }
             }
-            
+
             return nextState;
         });
         setTouched(prev => ({ ...prev, [name]: true }));
@@ -252,7 +242,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
         const finalErrors = validate(formData);
         if (Object.keys(finalErrors).length > 0) {
             setErrors(finalErrors);
-            setError('Please fix validation errors before submitting.');
+            setError('Please fix validation errors before saving.');
             return;
         }
 
@@ -260,33 +250,49 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
         setError('');
 
         try {
-            await createMemberWithSubscription(
-                {
-                    fullName: formData.fullName,
+            // 1. Update Member
+            const { error: memberError } = await supabase
+                .from('members')
+                .update({
+                    full_name: formData.fullName,
                     phone: formData.phone,
-                    gender: formData.gender as 'male' | 'female' | 'other',
-                    dateOfBirth: formData.dateOfBirth || undefined,
-                    address: formData.address || undefined,
-                    info: formData.info || undefined,
-                },
-                {
-                    planName: planNameSelect === 'Custom' ? formData.planName : planNameSelect,
-                    price: Number(formData.price),
-                    durationMonths: Number(formData.durationMonths),
-                    startDate: formData.startDate,
-                    endDate: formData.endDate,
-                },
-                {
-                    amount: Number(formData.initialPayment || formData.price),
-                    method: formData.paymentMethod,
-                    adminNote: formData.adminNote
-                }
-            );
+                    gender: formData.gender,
+                    date_of_birth: formData.dateOfBirth || null,
+                    address: formData.address || null,
+                    info: formData.info || null,
+                    status: formData.status
+                })
+                .eq('id', member.id);
+
+            if (memberError) throw memberError;
+
+            // 2. Update Subscription (if exists)
+            if (latestSubscription) {
+                const finalPlanName = planNameSelect === 'Custom' ? formData.planName : planNameSelect;
+                const { error: subError } = await supabase
+                    .from('subscriptions')
+                    .update({
+                        plan_name: finalPlanName,
+                        price: Number(formData.price),
+                        start_date: formData.startDate,
+                        end_date: formData.endDate,
+                        // Update active status based on current dates and/or manual status
+                        is_active: formData.status === 'active' && formData.endDate >= new Date().toISOString().split('T')[0]
+                    })
+                    .eq('id', latestSubscription.id);
+
+                if (subError) throw subError;
+            }
+
+            // 3. Trigger Biometric/Status Sync
+            const { error: syncError } = await supabase.rpc('sync_member_statuses');
+            if (syncError) console.error('Failed to sync member statuses:', syncError);
+
             onSuccess();
             onClose();
         } catch (err: any) {
             console.error(err);
-            setError(err.message || 'Failed to create member');
+            setError(err.message || 'Failed to update member');
         } finally {
             setLoading(false);
         }
@@ -294,18 +300,15 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
 
     const hasValidationError = (field: string) => touched[field] && errors[field];
 
-    // Check if form is valid to enable submit button
     const isFormValid = 
         formData.fullName.trim().length >= 3 &&
         formData.fullName.trim().length <= 100 &&
         /^\d{10}$/.test(formData.phone) &&
         (planNameSelect !== 'Custom' || formData.planName.trim() !== '') &&
         Number(formData.price) > 0 &&
-        Number(formData.durationMonths) > 0 &&
         formData.startDate !== '' &&
         formData.endDate !== '' &&
         new Date(formData.endDate) > new Date(formData.startDate) &&
-        (formData.initialPayment === '' || (Number(formData.initialPayment) >= 0 && Number(formData.initialPayment) <= Number(formData.price))) &&
         Object.keys(errors).length === 0 &&
         !isCheckingPhone;
 
@@ -313,7 +316,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center p-6 border-b border-gray-100 sticky top-0 bg-white z-10">
-                    <h2 className="text-xl font-bold text-gray-900">Add New Member</h2>
+                    <h2 className="text-xl font-bold text-gray-900">Edit Profile & Membership</h2>
                     <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
                         <X className="w-5 h-5 text-gray-500" />
                     </button>
@@ -342,7 +345,6 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
                                     value={formData.fullName}
                                     onChange={handleChange}
                                     type="text"
-                                    placeholder="John Doe"
                                     className={`w-full p-2.5 border rounded-lg focus:ring-2 outline-none text-gray-900 transition-all ${
                                         hasValidationError('fullName') 
                                             ? 'border-red-300 focus:ring-red-200' 
@@ -363,7 +365,6 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
                                         onChange={handleChange}
                                         type="tel"
                                         maxLength={10}
-                                        placeholder="9876543210"
                                         className={`w-full p-2.5 border rounded-lg focus:ring-2 outline-none text-gray-900 transition-all ${
                                             hasValidationError('phone') 
                                                 ? 'border-red-300 focus:ring-red-200' 
@@ -415,194 +416,143 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
                                     <p className="text-xs text-red-600 mt-1 font-medium">{errors.dateOfBirth}</p>
                                 )}
                             </div>
-                            <div className="md:col-span-2">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Membership Status *</label>
+                                <select
+                                    name="status"
+                                    value={formData.status}
+                                    onChange={handleChange}
+                                    className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900"
+                                >
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                    <option value="expired">Expired</option>
+                                </select>
+                            </div>
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
                                 <input
                                     name="address"
                                     value={formData.address}
                                     onChange={handleChange}
                                     type="text"
-                                    placeholder="Street, City, State"
+                                    className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900"
+                                />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Notes / Medical Info</label>
+                                <textarea
+                                    name="info"
+                                    value={formData.info}
+                                    onChange={handleChange}
+                                    rows={3}
+                                    placeholder="Enter any medical history, fitness goals, or staff notes here..."
                                     className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900"
                                 />
                             </div>
                         </div>
                     </div>
 
-                    {/* Subscription & Payment */}
-                    <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                            <Receipt className="w-5 h-5 text-green-500" />
-                            Plan & Payment
-                        </h3>
+                    {/* Subscription Info */}
+                    {latestSubscription && (
+                        <div className="space-y-4">
+                            <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                                <Receipt className="w-5 h-5 text-green-500" />
+                                Plan & Membership Details
+                            </h3>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Plan Name *</label>
-                                <select
-                                    value={planNameSelect}
-                                    onChange={handlePlanSelectChange}
-                                    className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 mb-2"
-                                >
-                                    <option value="Monthly">Monthly</option>
-                                    <option value="Quarterly">Quarterly</option>
-                                    <option value="Semi-Annually">Semi-Annually</option>
-                                    <option value="Annually">Annually</option>
-                                    <option value="Custom">Custom Plan</option>
-                                </select>
-                                {planNameSelect === 'Custom' && (
-                                    <input
-                                        required
-                                        name="planName"
-                                        value={formData.planName}
-                                        onChange={handleChange}
-                                        placeholder="e.g. Monthly Gold"
-                                        type="text"
-                                        className={`w-full p-2.5 border rounded-lg focus:ring-2 outline-none text-gray-900 transition-all ${
-                                            hasValidationError('planName') 
-                                                ? 'border-red-300 focus:ring-red-200' 
-                                                : 'border-gray-300 focus:ring-indigo-500'
-                                        }`}
-                                    />
-                                )}
-                                {hasValidationError('planName') && (
-                                    <p className="text-xs text-red-600 mt-1 font-medium">{errors.planName}</p>
-                                )}
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Price (Amount) *</label>
-                                <div className="relative">
-                                    <span className="absolute left-3 top-3 text-gray-500 text-sm font-bold">₹</span>
-                                    <input
-                                        required
-                                        name="price"
-                                        value={formData.price}
-                                        onChange={handleChange}
-                                        type="number"
-                                        placeholder="1200"
-                                        className={`w-full pl-7 pr-3 py-2.5 border rounded-lg focus:ring-2 outline-none text-gray-900 transition-all ${
-                                            hasValidationError('price') 
-                                                ? 'border-red-300 focus:ring-red-200' 
-                                                : 'border-gray-300 focus:ring-indigo-500'
-                                        }`}
-                                    />
-                                </div>
-                                {hasValidationError('price') && (
-                                    <p className="text-xs text-red-600 mt-1 font-medium">{errors.price}</p>
-                                )}
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Duration (Months) *</label>
-                                <select
-                                    name="durationMonths"
-                                    value={formData.durationMonths}
-                                    onChange={handleChange}
-                                    disabled={planNameSelect !== 'Custom'}
-                                    className={`w-full p-2.5 border rounded-lg focus:ring-2 outline-none text-gray-900 transition-all disabled:bg-gray-50 disabled:text-gray-500 ${
-                                        hasValidationError('durationMonths') 
-                                            ? 'border-red-300 focus:ring-red-200' 
-                                            : 'border-gray-300 focus:ring-indigo-500'
-                                    }`}
-                                >
-                                    <option value={1}>1 Month</option>
-                                    <option value={3}>3 Months</option>
-                                    <option value={6}>6 Months</option>
-                                    <option value={12}>1 Year</option>
-                                </select>
-                                {hasValidationError('durationMonths') && (
-                                    <p className="text-xs text-red-600 mt-1 font-medium">{errors.durationMonths}</p>
-                                )}
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
-                                <input
-                                    required
-                                    name="startDate"
-                                    value={formData.startDate}
-                                    onChange={handleChange}
-                                    type="date"
-                                    className={`w-full p-2.5 border rounded-lg focus:ring-2 outline-none text-gray-900 transition-all ${
-                                        hasValidationError('startDate') 
-                                            ? 'border-red-300 focus:ring-red-200' 
-                                            : 'border-gray-300 focus:ring-indigo-500'
-                                    }`}
-                                />
-                                {hasValidationError('startDate') && (
-                                    <p className="text-xs text-red-600 mt-1 font-medium">{errors.startDate}</p>
-                                )}
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
-                                <input
-                                    required
-                                    name="endDate"
-                                    value={formData.endDate}
-                                    onChange={handleChange}
-                                    type="date"
-                                    className={`w-full p-2.5 border rounded-lg focus:ring-2 outline-none text-gray-900 transition-all ${
-                                        hasValidationError('endDate') 
-                                            ? 'border-red-300 focus:ring-red-200' 
-                                            : 'border-gray-300 focus:ring-indigo-500'
-                                    }`}
-                                />
-                                {hasValidationError('endDate') && (
-                                    <p className="text-xs text-red-600 mt-1 font-medium">{errors.endDate}</p>
-                                )}
-                            </div>
-
-                            <div className="md:col-span-2 border-t border-gray-100 pt-4 mt-2">
-                                <h4 className="text-sm font-semibold text-gray-800 mb-3">Initial Payment Info</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Initial Payment Amount</label>
-                                        <div className="relative">
-                                            <span className="absolute left-3 top-3 text-gray-500 text-sm font-bold">₹</span>
-                                            <input
-                                                name="initialPayment"
-                                                value={formData.initialPayment}
-                                                onChange={handleChange}
-                                                type="number"
-                                                placeholder={formData.price || "1200"}
-                                                className={`w-full pl-7 pr-3 py-2.5 border rounded-lg focus:ring-2 outline-none text-gray-900 transition-all ${
-                                                    hasValidationError('initialPayment') 
-                                                        ? 'border-red-300 focus:ring-red-200' 
-                                                        : 'border-gray-300 focus:ring-indigo-500'
-                                                }`}
-                                            />
-                                        </div>
-                                        {hasValidationError('initialPayment') && (
-                                            <p className="text-xs text-red-600 mt-1 font-medium">{errors.initialPayment}</p>
-                                        )}
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-                                        <select
-                                            name="paymentMethod"
-                                            value={formData.paymentMethod}
-                                            onChange={handleChange}
-                                            className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900"
-                                        >
-                                            <option value="cash">Cash</option>
-                                            <option value="upi">UPI / Online</option>
-                                            <option value="card">Card</option>
-                                            <option value="other">Other</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Payment Note</label>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Plan Name *</label>
+                                    <select
+                                        value={planNameSelect}
+                                        onChange={handlePlanSelectChange}
+                                        className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 mb-2"
+                                    >
+                                        <option value="Monthly">Monthly</option>
+                                        <option value="Quarterly">Quarterly</option>
+                                        <option value="Semi-Annually">Semi-Annually</option>
+                                        <option value="Annually">Annually</option>
+                                        <option value="Custom">Custom Plan</option>
+                                    </select>
+                                    {planNameSelect === 'Custom' && (
                                         <input
-                                            name="adminNote"
-                                            value={formData.adminNote}
+                                            required
+                                            name="planName"
+                                            value={formData.planName}
                                             onChange={handleChange}
-                                            placeholder="Txn ID, Ref, etc."
                                             type="text"
-                                            className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900"
+                                            className={`w-full p-2.5 border rounded-lg focus:ring-2 outline-none text-gray-900 transition-all ${
+                                                hasValidationError('planName') 
+                                                    ? 'border-red-300 focus:ring-red-200' 
+                                                    : 'border-gray-300 focus:ring-indigo-500'
+                                            }`}
+                                        />
+                                    )}
+                                    {hasValidationError('planName') && (
+                                        <p className="text-xs text-red-600 mt-1 font-medium">{errors.planName}</p>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Membership Price *</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-3 text-gray-500 text-sm font-bold">₹</span>
+                                        <input
+                                            required
+                                            name="price"
+                                            value={formData.price}
+                                            onChange={handleChange}
+                                            type="number"
+                                            className={`w-full pl-7 pr-3 py-2.5 border rounded-lg focus:ring-2 outline-none text-gray-900 transition-all ${
+                                                hasValidationError('price') 
+                                                    ? 'border-red-300 focus:ring-red-200' 
+                                                    : 'border-gray-300 focus:ring-indigo-500'
+                                            }`}
                                         />
                                     </div>
+                                    {hasValidationError('price') && (
+                                        <p className="text-xs text-red-600 mt-1 font-medium">{errors.price}</p>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
+                                    <input
+                                        required
+                                        name="startDate"
+                                        value={formData.startDate}
+                                        onChange={handleChange}
+                                        type="date"
+                                        className={`w-full p-2.5 border rounded-lg focus:ring-2 outline-none text-gray-900 transition-all ${
+                                            hasValidationError('startDate') 
+                                                ? 'border-red-300 focus:ring-red-200' 
+                                                : 'border-gray-300 focus:ring-indigo-500'
+                                        }`}
+                                    />
+                                    {hasValidationError('startDate') && (
+                                        <p className="text-xs text-red-600 mt-1 font-medium">{errors.startDate}</p>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
+                                    <input
+                                        required
+                                        name="endDate"
+                                        value={formData.endDate}
+                                        onChange={handleChange}
+                                        type="date"
+                                        className={`w-full p-2.5 border rounded-lg focus:ring-2 outline-none text-gray-900 transition-all ${
+                                            hasValidationError('endDate') 
+                                                ? 'border-red-300 focus:ring-red-200' 
+                                                : 'border-gray-300 focus:ring-indigo-500'
+                                        }`}
+                                    />
+                                    {hasValidationError('endDate') && (
+                                        <p className="text-xs text-red-600 mt-1 font-medium">{errors.endDate}</p>
+                                    )}
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    )}
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
                         <button
@@ -618,7 +568,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
                             className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <Save className="w-5 h-5" />
-                            {loading ? 'Creating...' : 'Create Member'}
+                            {loading ? 'Saving...' : 'Save Changes'}
                         </button>
                     </div>
                 </form>

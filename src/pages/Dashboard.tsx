@@ -53,7 +53,7 @@ const Dashboard: React.FC = () => {
                 />
                 <StatsCard
                     title="Monthly Revenue"
-                    value={`$${stats.monthlyRevenue}`}
+                    value={`₹${stats.monthlyRevenue.toLocaleString('en-IN')}`}
                     icon={CreditCard}
                     trend="+5%"
                     trendUp={true}

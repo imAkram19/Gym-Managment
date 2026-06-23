@@ -239,7 +239,7 @@ async function initDeviceConnection() {
             console.log(`[+] Registered device found in DB: "${dbDevice.name}" (ID: ${dbDevice.id})`);
         } else {
             // Create a new device entry
-            const deviceName = ZK_SIMULATE ? 'Simulated Dev K40' : 'Hyderabad Gym Main K40';
+            const deviceName = ZK_SIMULATE ? 'Simulated Dev ZKTeco K40' : 'Iron Gym Main K40';
             const { data: newDevice, error: createError } = await supabase
                 .from('biometric_devices')
                 .insert([{
