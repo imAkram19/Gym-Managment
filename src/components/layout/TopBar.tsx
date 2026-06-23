@@ -67,8 +67,8 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick }) => {
     };
 
     const handleLogout = () => {
-        localStorage.removeItem('irongym_authenticated');
-        localStorage.removeItem('irongym_owner_access');
+        sessionStorage.removeItem('irongym_logged_in');
+        localStorage.removeItem('irongym_owner_access'); // Clear just in case
         window.location.reload();
     };
 

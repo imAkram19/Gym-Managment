@@ -12,7 +12,7 @@ import { Login } from './pages/Login';
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return localStorage.getItem('irongym_authenticated') === 'true';
+    return sessionStorage.getItem('irongym_logged_in') === 'true';
   });
 
   if (!isLoggedIn) {

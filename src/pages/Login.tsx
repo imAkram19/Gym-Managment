@@ -22,7 +22,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
         // Direct matching for solid, reliable feel
         if (username === expectedUsername && password === expectedPassword) {
-            localStorage.setItem('irongym_authenticated', 'true');
+            sessionStorage.setItem('irongym_logged_in', 'true');
             onLoginSuccess();
         } else {
             setError('Invalid username or password');
