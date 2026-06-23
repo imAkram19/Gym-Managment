@@ -22,6 +22,9 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick }) => {
     const [showNotifications, setShowNotifications] = useState(false);
     const notificationRef = useRef<HTMLDivElement>(null);
 
+    const [showProfileMenu, setShowProfileMenu] = useState(false);
+    const profileRef = useRef<HTMLDivElement>(null);
+
     const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
         try {
             const saved = localStorage.getItem('gym_notifications');
@@ -40,6 +43,9 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick }) => {
             if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
                 setShowNotifications(false);
             }
+            if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+                setShowProfileMenu(false);
+            }
         };
 
         document.addEventListener('mousedown', handleClickOutside);
@@ -52,8 +58,18 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick }) => {
         setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     };
 
+    const handleClearAll = () => {
+        setNotifications([]);
+    };
+
     const handleMarkSingleRead = (id: string) => {
         setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    };
+
+    const handleLogout = () => {
+        localStorage.removeItem('irongym_authenticated');
+        localStorage.removeItem('irongym_owner_access');
+        window.location.reload();
     };
 
     const unreadCount = notifications.filter(n => !n.read).length;
@@ -71,6 +87,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick }) => {
             </div>
 
             <div className="flex items-center gap-4">
+                {/* Notifications Menu */}
                 <div className="relative" ref={notificationRef}>
                     <button
                         className="p-2 hover:bg-gray-100 rounded-full relative"
@@ -79,7 +96,9 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick }) => {
                     >
                         <Bell className="w-5 h-5 text-gray-600" />
                         {unreadCount > 0 && (
-                            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full border-2 border-white text-[10px] font-bold text-white flex items-center justify-center">
+                                {unreadCount}
+                            </span>
                         )}
                     </button>
 
@@ -87,14 +106,24 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick }) => {
                         <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-100 py-2 z-50">
                             <div className="px-4 py-2 border-b border-gray-100 flex justify-between items-center">
                                 <h3 className="font-semibold text-gray-800">Notifications</h3>
-                                {unreadCount > 0 && (
-                                    <button 
-                                        onClick={handleMarkAllRead}
-                                        className="text-xs text-indigo-600 cursor-pointer hover:underline font-medium bg-transparent border-none outline-none"
-                                    >
-                                        Mark all read
-                                    </button>
-                                )}
+                                <div className="flex gap-2">
+                                    {unreadCount > 0 && (
+                                        <button 
+                                            onClick={handleMarkAllRead}
+                                            className="text-xs text-indigo-600 cursor-pointer hover:underline font-semibold bg-transparent border-none outline-none"
+                                        >
+                                            Mark all read
+                                        </button>
+                                    )}
+                                    {notifications.length > 0 && (
+                                        <button 
+                                            onClick={handleClearAll}
+                                            className="text-xs text-red-600 cursor-pointer hover:underline font-semibold bg-transparent border-none outline-none"
+                                        >
+                                            Clear all
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                             <div className="max-h-64 overflow-y-auto">
                                 {notifications.length === 0 ? (
@@ -126,11 +155,28 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick }) => {
                     )}
                 </div>
 
-                <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded-lg transition-colors">
-                    <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600">
-                        <User className="w-5 h-5" />
+                {/* Profile/Admin Dropdown */}
+                <div className="relative" ref={profileRef}>
+                    <div 
+                        onClick={() => setShowProfileMenu(!showProfileMenu)}
+                        className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded-lg transition-colors"
+                    >
+                        <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600">
+                            <User className="w-5 h-5" />
+                        </div>
+                        <span className="text-sm font-medium text-gray-700 hidden sm:block">Admin</span>
                     </div>
-                    <span className="text-sm font-medium text-gray-700 hidden sm:block">Admin</span>
+
+                    {showProfileMenu && (
+                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-50">
+                            <button
+                                onClick={handleLogout}
+                                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer font-medium border-none outline-none bg-transparent"
+                            >
+                                <span>Log Out</span>
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </header>

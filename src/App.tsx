@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { MainLayout } from './components/layout/MainLayout';
 import Dashboard from './pages/Dashboard';
@@ -7,8 +8,17 @@ import Attendance from './pages/Attendance';
 import Payments from './pages/Payments';
 import Subscriptions from './pages/Subscriptions';
 import Biometrics from './pages/Biometrics';
+import { Login } from './pages/Login';
 
 function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return localStorage.getItem('irongym_authenticated') === 'true';
+  });
+
+  if (!isLoggedIn) {
+    return <Login onLoginSuccess={() => setIsLoggedIn(true)} />;
+  }
+
   return (
     <Router>
       <Routes>
