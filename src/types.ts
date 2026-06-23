@@ -41,3 +41,30 @@ export interface Attendance {
     checkOutTime?: string;
     method: 'manual' | 'qr' | 'fingerprint';
 }
+
+export interface BiometricDevice {
+    id: string;
+    name: string;
+    ipAddress: string;
+    port: number;
+    status: 'online' | 'offline';
+    lastPing?: string;
+    createdAt?: string;
+}
+
+export interface BiometricEnrollment {
+    id: string;
+    memberId: string;
+    deviceUserId: number;
+    enrolledAt?: string;
+}
+
+export interface BiometricAttendanceLog {
+    id: string;
+    deviceId?: string;
+    deviceUserId: number;
+    scanTimestamp: string;
+    processed: boolean;
+    status: 'pending' | 'success' | 'denied_no_plan' | 'unknown_user' | 'failed';
+}
+

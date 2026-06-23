@@ -6,6 +6,7 @@ import MemberDetail from './pages/MemberDetail';
 import Attendance from './pages/Attendance';
 import Payments from './pages/Payments';
 import Subscriptions from './pages/Subscriptions';
+import Biometrics from './pages/Biometrics';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
           <Route path="attendance" element={<Attendance />} />
           <Route path="payments" element={<Payments />} />
           <Route path="subscriptions" element={<Subscriptions />} />
+          <Route path="biometrics" element={<Biometrics />} />
         </Route>
       </Routes>
     </Router>

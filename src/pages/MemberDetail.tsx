@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Phone, MapPin, Calendar, Activity, Clock } from 'lucide-react';
+import { ArrowLeft, User, Phone, MapPin, Calendar, Activity, Clock, Fingerprint, Link, Unlink } from 'lucide-react';
 import { getMemberById, getMemberHistory } from '../lib/api/members';
-import type { Member, Subscription, Payment, Attendance } from '../types';
+import { getEnrollmentByMemberId, enrollMemberBiometrics, deleteBiometricEnrollment } from '../lib/api/biometrics';
+import type { Member, Subscription, Payment, Attendance, BiometricEnrollment } from '../types';
 import { clsx } from 'clsx';
 
 import { AddSubscriptionModal } from '../components/members/AddSubscriptionModal';
@@ -20,17 +21,62 @@ const MemberDetail: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
 
+    // Biometric States
+    const [enrollment, setEnrollment] = useState<BiometricEnrollment | null>(null);
+    const [deviceUserIdInput, setDeviceUserIdInput] = useState('');
+    const [biometricLoading, setBiometricLoading] = useState(false);
+    const [biometricError, setBiometricError] = useState('');
+
     const loadData = async () => {
         if (!id) return;
         try {
             const memberData = await getMemberById(id);
             const historyData = await getMemberHistory(id);
+            const enrollData = await getEnrollmentByMemberId(id);
             setMember(memberData);
             setHistory(historyData);
+            setEnrollment(enrollData);
         } catch (error) {
             console.error("Failed to load member detail", error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleLinkBiometrics = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!id || !deviceUserIdInput) return;
+        setBiometricLoading(true);
+        setBiometricError('');
+        try {
+            const parsedId = parseInt(deviceUserIdInput, 10);
+            if (isNaN(parsedId)) throw new Error('Device User ID must be a valid number.');
+            const newEnroll = await enrollMemberBiometrics(id, parsedId);
+            setEnrollment({
+                id: newEnroll.id,
+                memberId: id,
+                deviceUserId: parsedId
+            });
+            setDeviceUserIdInput('');
+        } catch (err: any) {
+            setBiometricError(err.message || 'Failed to link fingerprint.');
+        } finally {
+            setBiometricLoading(false);
+        }
+    };
+
+    const handleUnlinkBiometrics = async () => {
+        if (!enrollment) return;
+        if (!confirm('Are you sure you want to remove this fingerprint mapping?')) return;
+        setBiometricLoading(true);
+        setBiometricError('');
+        try {
+            await deleteBiometricEnrollment(enrollment.id);
+            setEnrollment(null);
+        } catch (err: any) {
+            setBiometricError(err.message || 'Failed to unlink fingerprint.');
+        } finally {
+            setBiometricLoading(false);
         }
     };
 
@@ -98,11 +144,65 @@ const MemberDetail: React.FC = () => {
 
                 <div className="p-6">
                     {activeTab === 'profile' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <InfoItem label="Address" value={member.address} icon={MapPin} />
-                            <InfoItem label="Date of Birth" value={member.dateOfBirth} icon={Calendar} />
-                            <InfoItem label="Join Date" value={member.joinDate} icon={Clock} />
-                            <InfoItem label="Medical / Info" value={member.info} icon={Activity} />
+                        <div className="space-y-8">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <InfoItem label="Address" value={member.address} icon={MapPin} />
+                                <InfoItem label="Date of Birth" value={member.dateOfBirth} icon={Calendar} />
+                                <InfoItem label="Join Date" value={member.joinDate} icon={Clock} />
+                                <InfoItem label="Medical / Info" value={member.info} icon={Activity} />
+                            </div>
+
+                            {/* Biometric Mapping Card */}
+                            <div className="pt-6 border-t border-gray-100">
+                                <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2 mb-4">
+                                    <Fingerprint className="w-5 h-5 text-indigo-600" />
+                                    Biometric Mapping Status
+                                </h3>
+                                {enrollment ? (
+                                    <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                        <div>
+                                            <p className="text-sm font-semibold text-indigo-900">Fingerprint Enrolled</p>
+                                            <p className="text-xs text-indigo-700 mt-0.5">This member is linked to Device User ID <span className="font-bold text-base">{enrollment.deviceUserId}</span> on the K40 keypad.</p>
+                                        </div>
+                                        <button
+                                            onClick={handleUnlinkBiometrics}
+                                            disabled={biometricLoading}
+                                            className="px-4 py-2 bg-white hover:bg-red-50 text-red-600 border border-red-200 hover:border-red-300 font-semibold text-sm rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50"
+                                        >
+                                            <Unlink className="w-4 h-4" />
+                                            Unlink Fingerprint
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="bg-gray-50 border border-gray-100 p-6 rounded-xl">
+                                        <p className="text-sm font-medium text-gray-700">No Biometric Fingerprint Linked</p>
+                                        <p className="text-xs text-gray-400 mt-1 mb-4">Enroll this member's fingerprint on the physical device, then enter their keypad ID below to link them.</p>
+                                        
+                                        <form onSubmit={handleLinkBiometrics} className="flex flex-col sm:flex-row gap-3 max-w-md">
+                                            <input
+                                                type="number"
+                                                value={deviceUserIdInput}
+                                                onChange={e => setDeviceUserIdInput(e.target.value)}
+                                                placeholder="Enter Device User ID (e.g. 101)"
+                                                className="flex-1 p-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                                                required
+                                                disabled={biometricLoading}
+                                            />
+                                            <button
+                                                type="submit"
+                                                disabled={biometricLoading || !deviceUserIdInput}
+                                                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-semibold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                                            >
+                                                <Link className="w-4 h-4" />
+                                                Link Fingerprint
+                                            </button>
+                                        </form>
+                                        {biometricError && (
+                                            <p className="text-xs text-red-600 mt-2 font-medium">{biometricError}</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
 

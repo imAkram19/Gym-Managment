@@ -7,7 +7,8 @@ import {
     CalendarCheck,
     Banknote,
     X,
-    Dumbbell
+    Dumbbell,
+    Fingerprint
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -23,6 +24,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         { label: 'Subscriptions', path: '/subscriptions', icon: CreditCard },
         { label: 'Attendance', path: '/attendance', icon: CalendarCheck },
         { label: 'Payments', path: '/payments', icon: Banknote },
+        { label: 'Biometrics', path: '/biometrics', icon: Fingerprint },
     ];
 
     return (

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Fingerprint, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { getTodaysAttendance, checkInMember } from '../lib/api/attendance';
+import { getBiometricEnrollments } from '../lib/api/biometrics';
+import type { BiometricEnrollmentWithMember } from '../lib/api/biometrics';
 import { clsx } from 'clsx';
 
 const Attendance: React.FC = () => {
@@ -9,14 +11,29 @@ const Attendance: React.FC = () => {
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
     const [logs, setLogs] = useState<any[]>([]);
+    const [enrolledMembers, setEnrolledMembers] = useState<BiometricEnrollmentWithMember[]>([]);
+    const [selectedDeviceUserId, setSelectedDeviceUserId] = useState<string>('');
 
     const fetchLogs = async () => {
         const data = await getTodaysAttendance();
         setLogs(data);
     };
 
+    const fetchEnrolled = async () => {
+        try {
+            const data = await getBiometricEnrollments();
+            setEnrolledMembers(data);
+            if (data.length > 0) {
+                setSelectedDeviceUserId(data[0].deviceUserId.toString());
+            }
+        } catch (err) {
+            console.error("Failed to load enrolled members for simulation", err);
+        }
+    };
+
     useEffect(() => {
         fetchLogs();
+        fetchEnrolled();
     }, []);
 
     const handleCheckIn = async (method: 'manual' | 'fingerprint') => {
@@ -27,24 +44,49 @@ const Attendance: React.FC = () => {
         setMessage('');
 
         try {
-            // If fingerprint, we might mock a member ID or random success
-            const idToUse = method === 'fingerprint' ? 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' : identifier; // Using the mock user ID for fingerprint demo
+            if (method === 'fingerprint') {
+                if (!selectedDeviceUserId) {
+                    throw new Error("No members are enrolled in biometrics. Please enroll a member first.");
+                }
 
-            const result = await checkInMember(idToUse, method);
-            setStatus('success');
-            setMessage(`Welcome, ${result.memberName}!`);
-            setIdentifier('');
+                // Call the local simulator agent running on reception PC (localhost:4371)
+                try {
+                    const response = await fetch('http://localhost:4371/simulate-scan', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ deviceUserId: parseInt(selectedDeviceUserId, 10) })
+                    });
+                    
+                    const result = await response.json();
+                    if (result.success) {
+                        setStatus('success');
+                        setMessage(result.message || "Simulated check-in successful!");
+                    } else {
+                        setStatus('error');
+                        setMessage(result.message || "Access denied by biometric agent.");
+                    }
+                } catch (netErr) {
+                    throw new Error("Unable to connect to local sync agent. Please ensure you have run 'npm start' inside the 'sync-agent/' directory on port 4371.");
+                }
+            } else {
+                const result = await checkInMember(identifier, method);
+                setStatus('success');
+                setMessage(`Welcome, ${result.memberName}!`);
+                setIdentifier('');
+            }
             fetchLogs(); // Refresh list
         } catch (err: any) {
             setStatus('error');
             setMessage(err.message || "Check-in failed");
         } finally {
             setLoading(false);
-            // Clear status after 3 seconds
+            // Clear status after 5 seconds for simulator messages
             setTimeout(() => {
                 setStatus('idle');
                 setMessage('');
-            }, 3000);
+            }, 5000);
         }
     };
 
@@ -100,16 +142,38 @@ const Attendance: React.FC = () => {
                             <div className="flex-grow border-t border-gray-200"></div>
                         </div>
 
-                        {/* Mock Biometric */}
-                        <button
-                            onClick={() => handleCheckIn('fingerprint')}
-                            disabled={loading}
-                            className="w-full py-4 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center text-gray-500 hover:bg-gray-50 hover:border-indigo-400 transition-all group"
-                        >
-                            <Fingerprint className="w-12 h-12 mb-2 text-gray-400 group-hover:text-indigo-500 transition-colors" />
-                            <span className="font-medium group-hover:text-indigo-600">Simulate Fingerprint Scan</span>
-                            <span className="text-xs text-gray-400 mt-1">(Dev Mode: Checks in Mock User)</span>
-                        </button>
+                        {/* Simulated Biometric Dropdown & Scan */}
+                        <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Select Member Fingerprint</label>
+                                <select
+                                    value={selectedDeviceUserId}
+                                    onChange={e => setSelectedDeviceUserId(e.target.value)}
+                                    className="w-full p-2 border border-gray-300 bg-white rounded-lg text-sm outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                                    disabled={loading || enrolledMembers.length === 0}
+                                >
+                                    {enrolledMembers.length === 0 ? (
+                                        <option value="">No members enrolled yet</option>
+                                    ) : (
+                                        enrolledMembers.map(m => (
+                                            <option key={m.id} value={m.deviceUserId}>
+                                                {m.memberName} (ID: {m.deviceUserId} - {m.memberStatus})
+                                            </option>
+                                        ))
+                                    )}
+                                </select>
+                            </div>
+
+                            <button
+                                onClick={() => handleCheckIn('fingerprint')}
+                                disabled={loading || enrolledMembers.length === 0}
+                                className="w-full py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-slate-300 disabled:text-slate-500 transition-all font-semibold flex items-center justify-center gap-2 group shadow-sm"
+                            >
+                                <Fingerprint className="w-4 h-4 text-indigo-200 group-hover:text-white group-hover:scale-115 transition-transform" />
+                                Trigger Fingerprint Scan
+                            </button>
+                            <p className="text-[10px] text-center text-slate-400">Requires local sync agent running on port 4371</p>
+                        </div>
                     </div>
                 </div>
 
