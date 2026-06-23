@@ -297,7 +297,7 @@ async function run() {
             });
 
         } catch (error) {
-            console.error('[-] Connection to K40 device failed:', error.message);
+            console.error('[-] Connection to K40 device failed:', error.message || error);
             await updateHeartbeat('offline');
             console.log('[*] Retrying in 10 seconds...');
             setTimeout(run, 10000);
