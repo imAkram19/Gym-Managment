@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, User, Phone, MapPin, Calendar, Activity, Clock, Fingerprint, Link, Unlink, AlertTriangle } from 'lucide-react';
 import { getMemberById, getMemberHistory } from '../lib/api/members';
 import { getEnrollmentByMemberId, enrollMemberBiometrics, deleteBiometricEnrollment } from '../lib/api/biometrics';
+import { expireSubscription } from '../lib/api/subscriptions';
 import type { Member, Subscription, Payment, Attendance, BiometricEnrollment } from '../types';
 import { clsx } from 'clsx';
 
@@ -267,13 +268,37 @@ const MemberDetail: React.FC = () => {
 
                     {activeTab === 'subscriptions' && (
                         <Table
-                            headers={['Plan', 'Start Date', 'End Date', 'Price', 'Status']}
+                            headers={['Plan', 'Start Date', 'End Date', 'Price', 'Status', 'Actions']}
                             rows={history.subscriptions.map(sub => [
                                 sub.planName,
                                 sub.startDate,
                                 sub.endDate,
                                 `₹${sub.price}`,
-                                sub.isActive ? 'Active' : 'Expired'
+                                <span className={clsx(
+                                    "px-2 py-0.5 rounded-full text-xs font-semibold",
+                                    sub.isActive ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+                                )}>
+                                    {sub.isActive ? 'Active' : 'Expired'}
+                                </span>,
+                                sub.isActive ? (
+                                    <button
+                                        onClick={async () => {
+                                            if (!confirm('Are you sure you want to expire this subscription immediately to test the access blocking?')) return;
+                                            try {
+                                                setLoading(true);
+                                                await expireSubscription(sub.id);
+                                                await loadData();
+                                            } catch (err: any) {
+                                                alert(err.message || 'Failed to expire subscription');
+                                            } finally {
+                                                setLoading(false);
+                                            }
+                                        }}
+                                        className="px-2.5 py-1 text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded font-semibold transition-colors"
+                                    >
+                                        Force Expire
+                                    </button>
+                                ) : '-'
                             ])}
                         />
                     )}

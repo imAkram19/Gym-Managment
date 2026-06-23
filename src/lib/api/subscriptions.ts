@@ -55,3 +55,19 @@ export const getSubscriptions = async () => {
         };
     });
 };
+
+export const expireSubscription = async (id: string) => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    const { error } = await supabase
+        .from('subscriptions')
+        .update({
+            end_date: yesterdayStr,
+            is_active: false
+        })
+        .eq('id', id);
+
+    if (error) throw error;
+};
