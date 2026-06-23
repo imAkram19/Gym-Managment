@@ -29,6 +29,11 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 let dbDevice = null; // Holds the registered device record from database
+let zkInstance = null; // Holds the active ZKLib client instance
+
+// Cache of users enrolled on the device
+let deviceUsersCache = [];
+let lastCacheRefreshTime = 0;
 
 console.log('==================================================');
 console.log('       ZKTeco K40 Gym Sync Agent Starting         ');
@@ -44,6 +49,124 @@ function getTodayDate() {
 // Helper to get time in HH:MM:SS
 function getCurrentTime() {
     return new Date().toLocaleTimeString('en-GB', { hour12: false });
+}
+
+// Helper to refresh device user list cache
+async function refreshDeviceUsersCache(force = false) {
+    const now = Date.now();
+    // Cache for 30 seconds unless forced
+    if (!force && deviceUsersCache.length > 0 && (now - lastCacheRefreshTime < 30000)) {
+        return;
+    }
+
+    if (ZK_SIMULATE) {
+        // In simulation mode, mock cache from database active enrollments
+        try {
+            const { data: enrollments } = await supabase
+                .from('biometric_enrollments')
+                .select('device_user_id, sync_status, members(status)');
+            deviceUsersCache = (enrollments || [])
+                .filter(e => e.members?.status === 'active' && e.sync_status === 'synced')
+                .map(e => ({ userId: String(e.device_user_id), uid: e.device_user_id }));
+            lastCacheRefreshTime = now;
+        } catch (err) {
+            console.error('[-] Failed to refresh simulation user cache:', err.message);
+        }
+        return;
+    }
+
+    try {
+        if (!zkInstance) return;
+        const usersResult = await zkInstance.getUsers();
+        if (usersResult && usersResult.data) {
+            deviceUsersCache = usersResult.data;
+            lastCacheRefreshTime = now;
+            console.log(`[Cache] Refreshed device users cache. Found ${deviceUsersCache.length} users.`);
+        }
+    } catch (err) {
+        console.error('[-] Failed to retrieve users from device for cache:', err.message || err);
+    }
+}
+
+// Helper to delete user from device memory
+async function deleteUserFromDevice(userId) {
+    console.log(`[Device Control] Attempting to delete user ID ${userId} from device...`);
+    if (ZK_SIMULATE) {
+        console.log(`[Simulator] Mock deleting user ID ${userId} from device.`);
+        // Remove from simulation cache
+        deviceUsersCache = deviceUsersCache.filter(u => parseInt(u.userId, 10) !== parseInt(userId, 10));
+        return true;
+    }
+
+    try {
+        if (!zkInstance) throw new Error('ZK device not connected.');
+        
+        // Find user in cache to get their uid
+        await refreshDeviceUsersCache();
+        const deviceUser = deviceUsersCache.find(u => parseInt(u.userId, 10) === parseInt(userId, 10));
+        if (!deviceUser) {
+            console.log(`[-] User ID ${userId} not found on device memory cache.`);
+            return true; // Already deleted/not present
+        }
+
+        const uid = deviceUser.uid;
+        const payload = Buffer.alloc(2);
+        payload.writeUInt16LE(uid, 0);
+
+        // Command code 18 is CMD_DELETE_USER
+        await zkInstance.executeCmd(18, payload);
+        console.log(`[✔] Successfully deleted User ID ${userId} (UID: ${uid}) from device memory.`);
+        
+        // Remove from cache
+        deviceUsersCache = deviceUsersCache.filter(u => parseInt(u.userId, 10) !== parseInt(userId, 10));
+        return true;
+    } catch (err) {
+        console.error(`[-] Failed to delete user ID ${userId} from device:`, err.message || err);
+        return false;
+    }
+}
+
+// Biometric enrollment status sync loop
+async function syncBiometricEnrollments() {
+    try {
+        // Query enrollments that need actions
+        const { data: enrollments, error } = await supabase
+            .from('biometric_enrollments')
+            .select('id, device_user_id, sync_status, member_id')
+            .in('sync_status', ['needs_deletion', 'needs_enrollment']);
+
+        if (error) throw error;
+        if (!enrollments || enrollments.length === 0) return;
+
+        for (const enrollment of enrollments) {
+            const userId = enrollment.device_user_id;
+            
+            if (enrollment.sync_status === 'needs_deletion') {
+                const deleted = await deleteUserFromDevice(userId);
+                if (deleted) {
+                    const { error: updateErr } = await supabase
+                        .from('biometric_enrollments')
+                        .update({ sync_status: 'deleted' })
+                        .eq('id', enrollment.id);
+                    if (updateErr) console.error('[-] Failed to update sync_status to deleted:', updateErr.message);
+                }
+            } else if (enrollment.sync_status === 'needs_enrollment') {
+                // Check if user is now enrolled on device memory
+                await refreshDeviceUsersCache(true); // force refresh cache to look for new enrollments
+                const isEnrolled = deviceUsersCache.some(u => parseInt(u.userId, 10) === parseInt(userId, 10));
+                if (isEnrolled) {
+                    console.log(`[Sync] Detected re-enrollment for User ID ${userId} on device.`);
+                    const { error: updateErr } = await supabase
+                        .from('biometric_enrollments')
+                        .update({ sync_status: 'synced' })
+                        .eq('id', enrollment.id);
+                    if (updateErr) console.error('[-] Failed to update sync_status to synced:', updateErr.message);
+                }
+            }
+        }
+    } catch (err) {
+        console.error('[-] Error syncing biometric enrollments:', err.message);
+    }
 }
 
 // 2. Self-register device and handle pings
@@ -171,6 +294,17 @@ async function handleCheckIn(userId, timestamp) {
             return { success: false, reason: 'denied_no_plan', message: `Member ${memberName} has no active subscription.` };
         }
 
+        // Trigger door relay via remote unlock command if enabled
+        if (process.env.ZK_REMOTE_UNLOCK === 'true' && zkInstance && !ZK_SIMULATE) {
+            try {
+                // Command code 102 corresponds to CMD_UNLOCK
+                await zkInstance.executeCmd(102, '');
+                console.log(`[+] Sent remote unlock command to K40 relay for ${memberName}.`);
+            } catch (unlockErr) {
+                console.error('[-] Failed to trigger remote door unlock relay:', unlockErr.message || unlockErr);
+            }
+        }
+
         // 3. Prevent duplicate check-in for today
         const { data: existingCheckIn } = await supabase
             .from('attendance')
@@ -233,6 +367,9 @@ async function run() {
         app.use(cors());
         app.use(express.json());
 
+        // Initialize cache
+        await refreshDeviceUsersCache(true);
+
         // Receive simulated scan events
         app.post('/simulate-scan', async (req, res) => {
             const deviceUserId = req.body.deviceUserId || req.body.device_user_id;
@@ -240,9 +377,41 @@ async function run() {
                 return res.status(400).json({ error: 'deviceUserId is required' });
             }
             
+            // Verify if user is present in device cache/memory
+            await refreshDeviceUsersCache();
+            const exists = deviceUsersCache.some(u => parseInt(u.userId, 10) === parseInt(deviceUserId, 10));
+            if (!exists) {
+                console.warn(`[Simulator] Scan rejected: User ID ${deviceUserId} is not enrolled on device memory.`);
+                return res.json({ success: false, reason: 'not_enrolled', message: `Device User ID ${deviceUserId} is not enrolled on device memory.` });
+            }
+
             const timestamp = new Date().toISOString();
             const result = await handleCheckIn(deviceUserId, timestamp);
             res.json(result);
+        });
+
+        // Simulate physical enrollment on the keypad (for testing/development)
+        app.post('/simulate-enroll', async (req, res) => {
+            const deviceUserId = req.body.deviceUserId || req.body.device_user_id;
+            if (deviceUserId === undefined) {
+                return res.status(400).json({ error: 'deviceUserId is required' });
+            }
+            
+            console.log(`[Simulator] Mocking physical keypad enrollment for User ID ${deviceUserId}`);
+            try {
+                const { data, error } = await supabase
+                    .from('biometric_enrollments')
+                    .update({ sync_status: 'synced' })
+                    .eq('device_user_id', parseInt(deviceUserId, 10))
+                    .select();
+                
+                if (error) throw error;
+                
+                await refreshDeviceUsersCache(true);
+                res.json({ success: true, message: `Simulated physical enrollment for User ID ${deviceUserId}.`, data });
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
         });
 
         // Provide list of enrolled members to developer UI for easy testing
@@ -250,7 +419,7 @@ async function run() {
             try {
                 const { data, error } = await supabase
                     .from('biometric_enrollments')
-                    .select('device_user_id, member_id, members(full_name, status)');
+                    .select('device_user_id, member_id, sync_status, members(full_name, status)');
                 
                 if (error) throw error;
                 res.json(data);
@@ -259,6 +428,16 @@ async function run() {
             }
         });
 
+        // Start simulation sync interval (runs database updates & deletions)
+        setInterval(async () => {
+            try {
+                await supabase.rpc('sync_member_statuses');
+                await syncBiometricEnrollments();
+            } catch (err) {
+                console.error('[-] Error in simulation sync loop:', err.message);
+            }
+        }, 8000);
+
         app.listen(SIMULATOR_PORT, () => {
             console.log(`[+] Simulation Server listening on http://localhost:${SIMULATOR_PORT}`);
             console.log(`[+] Send POST requests to http://localhost:${SIMULATOR_PORT}/simulate-scan`);
@@ -266,7 +445,7 @@ async function run() {
 
     } else {
         // --- 4b. PRODUCTION HARDWARE CONNECTION MODE ---
-        let zkInstance = new ZKLib(DEVICE_IP, DEVICE_PORT, 10000, 4000);
+        zkInstance = new ZKLib(DEVICE_IP, DEVICE_PORT, 10000, 4000);
         let pollInterval = null;
 
         const cleanup = async () => {
@@ -287,14 +466,21 @@ async function run() {
             console.log('[+] Connected to physical ZKTeco K40 device successfully.');
             await updateHeartbeat('online');
 
-            const users = await zkInstance.getUsers();
-            console.log(`[+] Retrieved ${users.data.length} users enrolled on device memory.`);
+            // Initialize cache
+            await refreshDeviceUsersCache(true);
+            console.log(`[+] Retrieved ${deviceUsersCache.length} users enrolled on device memory.`);
 
             // 1. Transaction Memory Polling Fallback
             // Poll device log history every 8 seconds to capture scans.
             // This is 100% reliable across all firmware versions and syncs offline records.
             const pollLogs = async () => {
                 try {
+                    // Sync expired memberships and subscription statuses in database
+                    await supabase.rpc('sync_member_statuses');
+
+                    // Process biometric synchronization tasks (deletions / status checks)
+                    await syncBiometricEnrollments();
+
                     const attendances = await zkInstance.getAttendances();
                     if (attendances && attendances.data) {
                         for (const log of attendances.data) {

@@ -57,6 +57,7 @@ export interface BiometricEnrollment {
     memberId: string;
     deviceUserId: number;
     enrolledAt?: string;
+    syncStatus?: 'synced' | 'needs_deletion' | 'deleted' | 'needs_enrollment';
 }
 
 export interface BiometricAttendanceLog {

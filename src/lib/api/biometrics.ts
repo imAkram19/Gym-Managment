@@ -70,6 +70,7 @@ export const getBiometricEnrollments = async (): Promise<BiometricEnrollmentWith
         memberId: enroll.member_id,
         deviceUserId: enroll.device_user_id,
         enrolledAt: enroll.enrolled_at,
+        syncStatus: enroll.sync_status || 'synced',
         memberName: enroll.members?.full_name || 'Unknown',
         memberStatus: enroll.members?.status || 'unknown'
     }));
@@ -84,7 +85,14 @@ export const getEnrollmentByMemberId = async (memberId: string): Promise<Biometr
         .maybeSingle();
     
     if (error) throw error;
-    return data;
+    if (!data) return null;
+    return {
+        id: data.id,
+        memberId: data.member_id,
+        deviceUserId: data.device_user_id,
+        enrolledAt: data.enrolled_at,
+        syncStatus: data.sync_status || 'synced'
+    };
 };
 
 // Enroll/link a member to a keypad ID

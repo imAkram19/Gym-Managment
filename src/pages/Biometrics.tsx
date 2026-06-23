@@ -463,6 +463,7 @@ const Biometrics: React.FC = () => {
                                     <tr>
                                         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Member</th>
                                         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Member Status</th>
+                                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Device Sync</th>
                                         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Device User ID</th>
                                         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Enrolled At</th>
                                         <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
@@ -471,7 +472,7 @@ const Biometrics: React.FC = () => {
                                 <tbody className="divide-y divide-gray-200 bg-white">
                                     {filteredEnrollments.length === 0 ? (
                                         <tr>
-                                            <td colSpan={5} className="px-6 py-8 text-center text-gray-500 text-sm">
+                                            <td colSpan={6} className="px-6 py-8 text-center text-gray-500 text-sm">
                                                 No enrollments found. Map a gym member to a keypad user ID using the panel on the left.
                                             </td>
                                         </tr>
@@ -487,6 +488,20 @@ const Biometrics: React.FC = () => {
                                                         enroll.memberStatus === 'inactive' && "bg-gray-100 text-gray-600"
                                                     )}>
                                                         {enroll.memberStatus.toUpperCase()}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <span className={clsx(
+                                                        "px-2.5 py-0.5 rounded-full text-xs font-semibold inline-flex items-center gap-1 border",
+                                                        enroll.syncStatus === 'synced' && "bg-green-50 text-green-700 border-green-200",
+                                                        enroll.syncStatus === 'needs_deletion' && "bg-amber-50 text-amber-700 border-amber-200",
+                                                        enroll.syncStatus === 'deleted' && "bg-red-50 text-red-700 border-red-200",
+                                                        enroll.syncStatus === 'needs_enrollment' && "bg-indigo-50 text-indigo-700 border-indigo-200 animate-pulse"
+                                                    )}>
+                                                        {enroll.syncStatus === 'synced' && 'Active'}
+                                                        {enroll.syncStatus === 'needs_deletion' && 'Pending Block'}
+                                                        {enroll.syncStatus === 'deleted' && 'Blocked'}
+                                                        {enroll.syncStatus === 'needs_enrollment' && 'Re-Enroll'}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-600">{enroll.deviceUserId}</td>

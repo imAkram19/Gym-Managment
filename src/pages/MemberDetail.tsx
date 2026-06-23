@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Phone, MapPin, Calendar, Activity, Clock, Fingerprint, Link, Unlink } from 'lucide-react';
+import { ArrowLeft, User, Phone, MapPin, Calendar, Activity, Clock, Fingerprint, Link, Unlink, AlertTriangle } from 'lucide-react';
 import { getMemberById, getMemberHistory } from '../lib/api/members';
 import { getEnrollmentByMemberId, enrollMemberBiometrics, deleteBiometricEnrollment } from '../lib/api/biometrics';
 import type { Member, Subscription, Payment, Attendance, BiometricEnrollment } from '../types';
@@ -159,19 +159,78 @@ const MemberDetail: React.FC = () => {
                                     Biometric Mapping Status
                                 </h3>
                                 {enrollment ? (
-                                    <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                                        <div>
-                                            <p className="text-sm font-semibold text-indigo-900">Fingerprint Enrolled</p>
-                                            <p className="text-xs text-indigo-700 mt-0.5">This member is linked to Device User ID <span className="font-bold text-base">{enrollment.deviceUserId}</span> on the K40 keypad.</p>
+                                    <div className="space-y-4">
+                                        <div className={clsx(
+                                            "border p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-colors",
+                                            enrollment.syncStatus === 'synced' && "bg-green-50 border-green-200",
+                                            enrollment.syncStatus === 'needs_deletion' && "bg-amber-50 border-amber-200 animate-pulse",
+                                            enrollment.syncStatus === 'deleted' && "bg-red-50 border-red-200",
+                                            enrollment.syncStatus === 'needs_enrollment' && "bg-indigo-50 border-indigo-200"
+                                        )}>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <p className={clsx(
+                                                        "text-sm font-bold",
+                                                        enrollment.syncStatus === 'synced' && "text-green-900",
+                                                        enrollment.syncStatus === 'needs_deletion' && "text-amber-900",
+                                                        enrollment.syncStatus === 'deleted' && "text-red-900",
+                                                        enrollment.syncStatus === 'needs_enrollment' && "text-indigo-900"
+                                                    )}>
+                                                        {enrollment.syncStatus === 'synced' && 'Fingerprint Active'}
+                                                        {enrollment.syncStatus === 'needs_deletion' && 'Blocking Process Initiated'}
+                                                        {enrollment.syncStatus === 'deleted' && 'Fingerprint Blocked'}
+                                                        {enrollment.syncStatus === 'needs_enrollment' && 'Re-Enrollment Required'}
+                                                    </p>
+                                                    <span className={clsx(
+                                                        "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border",
+                                                        enrollment.syncStatus === 'synced' && "bg-green-100 text-green-800 border-green-300",
+                                                        enrollment.syncStatus === 'needs_deletion' && "bg-amber-100 text-amber-800 border-amber-300",
+                                                        enrollment.syncStatus === 'deleted' && "bg-red-100 text-red-800 border-red-300",
+                                                        enrollment.syncStatus === 'needs_enrollment' && "bg-indigo-100 text-indigo-800 border-indigo-300 animate-pulse"
+                                                    )}>
+                                                        {enrollment.syncStatus === 'synced' && 'Synced'}
+                                                        {enrollment.syncStatus === 'needs_deletion' && 'Syncing'}
+                                                        {enrollment.syncStatus === 'deleted' && 'Blocked'}
+                                                        {enrollment.syncStatus === 'needs_enrollment' && 'Pending Scan'}
+                                                    </span>
+                                                </div>
+                                                <p className={clsx(
+                                                    "text-xs mt-1",
+                                                    enrollment.syncStatus === 'synced' && "text-green-700",
+                                                    enrollment.syncStatus === 'needs_deletion' && "text-amber-700",
+                                                    enrollment.syncStatus === 'deleted' && "text-red-700",
+                                                    enrollment.syncStatus === 'needs_enrollment' && "text-indigo-700"
+                                                )}>
+                                                    {enrollment.syncStatus === 'synced' && `Member is mapped to Keypad ID ${enrollment.deviceUserId} and has active access to gym doors.`}
+                                                    {enrollment.syncStatus === 'needs_deletion' && `Subscription has expired. Deletion command has been sent to the K40 device for ID ${enrollment.deviceUserId}.`}
+                                                    {enrollment.syncStatus === 'deleted' && `Access Denied: Fingerprint for ID ${enrollment.deviceUserId} was deleted from the device memory. Member must renew and re-register.`}
+                                                    {enrollment.syncStatus === 'needs_enrollment' && `Subscription renewed! Please physically register fingerprint ID ${enrollment.deviceUserId} on the K40 device keypad.`}
+                                                </p>
+                                            </div>
+                                            <button
+                                                onClick={handleUnlinkBiometrics}
+                                                disabled={biometricLoading}
+                                                className="px-4 py-2 bg-white hover:bg-red-50 text-red-600 border border-red-200 hover:border-red-300 font-semibold text-sm rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 self-end sm:self-center"
+                                            >
+                                                <Unlink className="w-4 h-4" />
+                                                Unlink Mapping
+                                            </button>
                                         </div>
-                                        <button
-                                            onClick={handleUnlinkBiometrics}
-                                            disabled={biometricLoading}
-                                            className="px-4 py-2 bg-white hover:bg-red-50 text-red-600 border border-red-200 hover:border-red-300 font-semibold text-sm rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50"
-                                        >
-                                            <Unlink className="w-4 h-4" />
-                                            Unlink Fingerprint
-                                        </button>
+                                        {enrollment.syncStatus === 'needs_enrollment' && (
+                                            <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl text-xs text-indigo-800 flex items-start gap-2">
+                                                <AlertTriangle className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
+                                                <div>
+                                                    <span className="font-bold">Staff Instruction:</span>
+                                                    <ol className="list-decimal pl-4 mt-1 space-y-1">
+                                                        <li>Press M/OK on the ZKTeco K40 device.</li>
+                                                        <li>Go to <span className="font-semibold">User Mgt</span> &gt; <span className="font-semibold">New User</span> (or edit user).</li>
+                                                        <li>Set the User ID to <span className="font-bold text-sm bg-white px-1 border border-indigo-200 rounded">{enrollment.deviceUserId}</span>.</li>
+                                                        <li>Scan the member's finger three times to enroll.</li>
+                                                        <li>The sync agent will automatically detect the enrollment within 8 seconds and activate their door access.</li>
+                                                    </ol>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="bg-gray-50 border border-gray-100 p-6 rounded-xl">
