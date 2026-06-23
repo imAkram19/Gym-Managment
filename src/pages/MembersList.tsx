@@ -4,20 +4,71 @@ import { AddMemberModal } from '../components/members/AddMemberModal';
 import { getMembers } from '../lib/api/members';
 import type { Member } from '../types';
 import { clsx } from 'clsx';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+
+const mapMember = (data: any): Member => ({
+    id: data.id,
+    fullName: data.full_name,
+    email: data.email,
+    phone: data.phone,
+    gender: data.gender,
+    dateOfBirth: data.date_of_birth,
+    address: data.address,
+    info: data.info,
+    joinDate: data.join_date,
+    status: data.status,
+    imageUrl: data.image_url
+});
 
 const MembersList: React.FC = () => {
+    const [searchParams] = useSearchParams();
+    const filterParam = searchParams.get('filter');
+
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [members, setMembers] = useState<Member[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'expired' | 'inactive'>('all');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'expired' | 'inactive' | 'expiring'>(() => {
+        if (filterParam === 'expiring') return 'expiring';
+        if (filterParam === 'expired') return 'expired';
+        if (filterParam === 'active') return 'active';
+        return 'all';
+    });
 
     const fetchMembersData = async () => {
         setLoading(true);
         try {
-            const data = await getMembers(search, statusFilter);
-            setMembers(data);
+            if (statusFilter === 'expiring') {
+                const sevenDaysFromNow = new Date();
+                sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+                const sevenDaysStr = sevenDaysFromNow.toISOString().split('T')[0];
+                const todayStr = new Date().toISOString().split('T')[0];
+
+                const { data: expiringSubs } = await supabase
+                    .from('subscriptions')
+                    .select('member_id')
+                    .eq('is_active', true)
+                    .lte('end_date', sevenDaysStr)
+                    .gte('end_date', todayStr);
+
+                const memberIds = expiringSubs?.map(s => s.member_id) || [];
+                
+                if (memberIds.length === 0) {
+                    setMembers([]);
+                } else {
+                    let query = supabase.from('members').select('*').in('id', memberIds);
+                    if (search) {
+                        query = query.or(`full_name.ilike.%${search}%,phone.ilike.%${search}%`);
+                    }
+                    const { data, error } = await query;
+                    if (error) throw error;
+                    setMembers((data || []).map(mapMember));
+                }
+            } else {
+                const data = await getMembers(search, statusFilter);
+                setMembers(data);
+            }
         } catch (error) {
             console.error("Failed to fetch members", error);
         } finally {
@@ -69,6 +120,7 @@ const MembersList: React.FC = () => {
                         <option value="active">Active</option>
                         <option value="expired">Expired</option>
                         <option value="inactive">Inactive</option>
+                        <option value="expiring">Expiring Soon</option>
                     </select>
                 </div>
             </div>

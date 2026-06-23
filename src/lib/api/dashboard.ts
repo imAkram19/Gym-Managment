@@ -17,14 +17,35 @@ export const getDashboardStats = async () => {
     sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
     const sevenDaysStr = sevenDaysFromNow.toISOString().split('T')[0];
 
-    const { count: expiringSoon, error: expiringError } = await supabase
+    const { data: expiringSoonList, error: expiringError } = await supabase
         .from('subscriptions')
-        .select('*', { count: 'exact', head: true })
+        .select(`
+            id,
+            end_date,
+            members (
+                full_name
+            )
+        `)
         .eq('is_active', true)
         .lte('end_date', sevenDaysStr)
-        .gte('end_date', todayStr);
+        .gte('end_date', todayStr)
+        .order('end_date', { ascending: true });
 
     if (expiringError) console.error('Error fetching expiring subscriptions:', expiringError);
+
+    const expiringSoonMembers = (expiringSoonList || []).map((sub: any) => {
+        const endDate = new Date(sub.end_date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const endD = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+        const startD = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const diffTime = endD.getTime() - startD.getTime();
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+        return {
+            name: sub.members?.full_name || 'Unknown Member',
+            daysRemaining: diffDays
+        };
+    });
 
     // 3. Attendance Rate Today
     const { count: todaysAttendanceCount, error: attError } = await supabase
@@ -84,7 +105,8 @@ export const getDashboardStats = async () => {
 
     return {
         activeMembers: activeCount,
-        expiringSoon: expiringSoon || 0,
+        expiringSoon: expiringSoonMembers.length,
+        expiringSoonMembers,
         attendanceRate,
         monthlyRevenue,
         totalCollections,

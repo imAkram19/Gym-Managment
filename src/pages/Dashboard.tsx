@@ -12,6 +12,7 @@ import {
     Activity, 
     UserCheck
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { ActivityChart } from '../components/dashboard/ActivityChart';
 import { 
     getDashboardStats, 
@@ -23,6 +24,7 @@ import {
 interface DashboardStats {
     activeMembers: number;
     expiringSoon: number;
+    expiringSoonMembers?: any[];
     attendanceRate: number;
     monthlyRevenue: number;
     totalCollections: number;
@@ -35,14 +37,17 @@ interface DashboardStats {
 }
 
 const Dashboard: React.FC = () => {
+    const navigate = useNavigate();
     const [isOwnerUnlocked, setIsOwnerUnlocked] = useState(false);
     const [ownerPasswordInput, setOwnerPasswordInput] = useState('');
     const [showOwnerPassword, setShowOwnerPassword] = useState(false);
     const [ownerError, setOwnerError] = useState('');
+    const [isExpiringHovered, setIsExpiringHovered] = useState(false);
 
     const [stats, setStats] = useState<DashboardStats>({
         activeMembers: 0,
         expiringSoon: 0,
+        expiringSoonMembers: [],
         attendanceRate: 0,
         monthlyRevenue: 0,
         totalCollections: 0,
@@ -172,7 +177,12 @@ const Dashboard: React.FC = () => {
                     </div>
 
                     {/* Expiring Soon */}
-                    <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 flex justify-between items-center hover:shadow-md transition-shadow">
+                    <div 
+                        onMouseEnter={() => setIsExpiringHovered(true)}
+                        onMouseLeave={() => setIsExpiringHovered(false)}
+                        onClick={() => navigate('/members?filter=expiring')}
+                        className="relative p-6 bg-white rounded-xl shadow-sm border border-gray-100 flex justify-between items-center hover:shadow-md transition-shadow cursor-pointer"
+                    >
                         <div>
                             <p className="text-sm font-medium text-gray-500">Expiring Soon (7d)</p>
                             <h3 className="text-2xl font-bold mt-2 text-gray-950">{stats.expiringSoon}</h3>
@@ -180,6 +190,27 @@ const Dashboard: React.FC = () => {
                         <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
                             <AlertCircle className="w-6 h-6" />
                         </div>
+
+                        {/* Hover Popover */}
+                        {isExpiringHovered && stats.expiringSoonMembers && stats.expiringSoonMembers.length > 0 && (
+                            <div className="absolute left-0 top-full mt-2 w-64 bg-slate-900 text-white text-xs rounded-lg shadow-xl p-4 z-50 border border-slate-800 space-y-2 pointer-events-auto">
+                                <p className="font-bold border-b border-slate-800 pb-1.5 text-amber-400">Expiring Members</p>
+                                <div className="space-y-1.5">
+                                    {stats.expiringSoonMembers.slice(0, 5).map((m: any, idx: number) => (
+                                        <div key={idx} className="flex justify-between items-center">
+                                            <span className="font-medium truncate max-w-[150px]">{m.name}</span>
+                                            <span className="text-slate-400">{m.daysRemaining} {m.daysRemaining === 1 ? 'day' : 'days'}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                {stats.expiringSoonMembers.length > 5 && (
+                                    <div className="pt-1.5 border-t border-slate-800 text-[10px] text-indigo-400 font-bold text-right flex justify-between items-center">
+                                        <span>+{stats.expiringSoonMembers.length - 5} more</span>
+                                        <span>View All →</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {/* Attendance Rate */}
