@@ -5,7 +5,6 @@ import {
     Users,
     CreditCard,
     CalendarCheck,
-    Banknote,
     X,
     Dumbbell,
     Fingerprint
@@ -23,7 +22,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         { label: 'Members', path: '/members', icon: Users },
         { label: 'Subscriptions', path: '/subscriptions', icon: CreditCard },
         { label: 'Attendance', path: '/attendance', icon: CalendarCheck },
-        { label: 'Payments', path: '/payments', icon: Banknote },
         { label: 'Biometrics', path: '/biometrics', icon: Fingerprint },
     ];
 

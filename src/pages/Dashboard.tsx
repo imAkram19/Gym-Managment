@@ -1,9 +1,38 @@
 import React, { useEffect, useState } from 'react';
-import { Users, CreditCard, TrendingUp, AlertCircle, Lock, Eye, EyeOff } from 'lucide-react';
-import { StatsCard } from '../components/dashboard/StatsCard';
+import { 
+    Users, 
+    AlertCircle, 
+    Lock, 
+    Eye, 
+    EyeOff, 
+    Banknote, 
+    Coins, 
+    ArrowUpRight, 
+    ArrowDownRight, 
+    Activity, 
+    UserCheck
+} from 'lucide-react';
 import { ActivityChart } from '../components/dashboard/ActivityChart';
-import { RecentActivity } from '../components/dashboard/RecentActivity';
-import { getDashboardStats, getRecentActivity, getRevenueData } from '../lib/api/dashboard';
+import { 
+    getDashboardStats, 
+    getRecentPayments, 
+    getCombinedRecentActivity, 
+    getRevenueData 
+} from '../lib/api/dashboard';
+
+interface DashboardStats {
+    activeMembers: number;
+    expiringSoon: number;
+    attendanceRate: number;
+    monthlyRevenue: number;
+    totalCollections: number;
+    cashPayments: number;
+    upiPayments: number;
+    otherPayments: number;
+    revenueTrend: number;
+    avgPaymentAmount: number;
+    totalTransactions: number;
+}
 
 const Dashboard: React.FC = () => {
     const [isOwnerUnlocked, setIsOwnerUnlocked] = useState(false);
@@ -11,8 +40,21 @@ const Dashboard: React.FC = () => {
     const [showOwnerPassword, setShowOwnerPassword] = useState(false);
     const [ownerError, setOwnerError] = useState('');
 
-    const [stats, setStats] = useState({ activeMembers: 0, expiringSoon: 0, monthlyRevenue: 0 });
-    const [recentActivies, setRecentActivities] = useState<any[]>([]);
+    const [stats, setStats] = useState<DashboardStats>({
+        activeMembers: 0,
+        expiringSoon: 0,
+        attendanceRate: 0,
+        monthlyRevenue: 0,
+        totalCollections: 0,
+        cashPayments: 0,
+        upiPayments: 0,
+        otherPayments: 0,
+        revenueTrend: 0,
+        avgPaymentAmount: 0,
+        totalTransactions: 0
+    });
+    const [recentPayments, setRecentPayments] = useState<any[]>([]);
+    const [recentActivities, setRecentActivities] = useState<any[]>([]);
     const [revenueData, setRevenueData] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -26,10 +68,12 @@ const Dashboard: React.FC = () => {
             setLoading(true);
             try {
                 const statsData = await getDashboardStats();
-                const activityData = await getRecentActivity();
+                const paymentsData = await getRecentPayments(10);
+                const activityData = await getCombinedRecentActivity();
                 const chartData = await getRevenueData();
 
                 setStats(statsData);
+                setRecentPayments(paymentsData);
                 setRecentActivities(activityData);
                 setRevenueData(chartData);
             } catch (error) {
@@ -102,48 +146,257 @@ const Dashboard: React.FC = () => {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-8 pb-12 max-h-[85vh] overflow-y-auto pr-2 custom-scrollbar">
+            {/* Header */}
             <div>
                 <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-                <p className="text-gray-500">Welcome back, here's what's happening today.</p>
+                <p className="text-gray-500">Real-time business performance and operational summary.</p>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatsCard
-                    title="Active Members"
-                    value={stats.activeMembers}
-                    icon={Users}
-                    trend="+12%"
-                    trendUp={true}
-                />
-                <StatsCard
-                    title="Monthly Revenue"
-                    value={`₹${stats.monthlyRevenue.toLocaleString('en-IN')}`}
-                    icon={CreditCard}
-                    trend="+5%"
-                    trendUp={true}
-                />
-                <StatsCard
-                    title="Expiring Soon"
-                    value={stats.expiringSoon}
-                    icon={AlertCircle}
-                    color="bg-orange-50 border-orange-100"
-                />
-                <StatsCard
-                    title="Attendance Rate"
-                    value="85%"
-                    icon={TrendingUp}
-                />
+            {/* A. Overview Section */}
+            <div className="space-y-3">
+                <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-indigo-500" />
+                    Overview
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Active Members */}
+                    <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 flex justify-between items-center hover:shadow-md transition-shadow">
+                        <div>
+                            <p className="text-sm font-medium text-gray-500">Active Members</p>
+                            <h3 className="text-2xl font-bold mt-2 text-gray-950">{stats.activeMembers}</h3>
+                        </div>
+                        <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+                            <Users className="w-6 h-6" />
+                        </div>
+                    </div>
+
+                    {/* Expiring Soon */}
+                    <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 flex justify-between items-center hover:shadow-md transition-shadow">
+                        <div>
+                            <p className="text-sm font-medium text-gray-500">Expiring Soon (7d)</p>
+                            <h3 className="text-2xl font-bold mt-2 text-gray-950">{stats.expiringSoon}</h3>
+                        </div>
+                        <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
+                            <AlertCircle className="w-6 h-6" />
+                        </div>
+                    </div>
+
+                    {/* Attendance Rate */}
+                    <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 flex justify-between items-center hover:shadow-md transition-shadow">
+                        <div>
+                            <p className="text-sm font-medium text-gray-500">Attendance Rate Today</p>
+                            <h3 className="text-2xl font-bold mt-2 text-gray-950">{stats.attendanceRate}%</h3>
+                        </div>
+                        <div className="p-3 bg-sky-50 text-sky-600 rounded-xl">
+                            <UserCheck className="w-6 h-6" />
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            {/* Charts & Activity */}
+            {/* B. Financial Section */}
+            <div className="space-y-3">
+                <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                    <Coins className="w-5 h-5 text-indigo-500" />
+                    Financial Summary
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                    {/* Monthly Revenue (Gradient Accent) */}
+                    <div className="p-5 bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-xl shadow-sm text-white flex flex-col justify-between hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-center">
+                            <p className="text-indigo-100 text-xs font-semibold uppercase tracking-wider">Monthly Revenue</p>
+                            <Banknote className="w-4 h-4 text-indigo-200" />
+                        </div>
+                        <h3 className="text-xl font-extrabold mt-3">₹{stats.monthlyRevenue.toLocaleString('en-IN')}</h3>
+                    </div>
+
+                    {/* Total Collections */}
+                    <div className="p-5 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-center">
+                            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Total Collections</p>
+                            <Coins className="w-4 h-4 text-emerald-500" />
+                        </div>
+                        <h3 className="text-xl font-bold mt-3 text-gray-900">₹{stats.totalCollections.toLocaleString('en-IN')}</h3>
+                    </div>
+
+                    {/* Cash Payments */}
+                    <div className="p-5 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-center">
+                            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Cash Payments</p>
+                            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                        </div>
+                        <h3 className="text-xl font-bold mt-3 text-gray-900">₹{stats.cashPayments.toLocaleString('en-IN')}</h3>
+                    </div>
+
+                    {/* UPI Payments */}
+                    <div className="p-5 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-center">
+                            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">UPI Payments</p>
+                            <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                        </div>
+                        <h3 className="text-xl font-bold mt-3 text-gray-900">₹{stats.upiPayments.toLocaleString('en-IN')}</h3>
+                    </div>
+
+                    {/* Other Payment Methods */}
+                    <div className="p-5 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-center">
+                            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Other Methods</p>
+                            <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                        </div>
+                        <h3 className="text-xl font-bold mt-3 text-gray-900">₹{stats.otherPayments.toLocaleString('en-IN')}</h3>
+                    </div>
+                </div>
+            </div>
+
+            {/* C. Revenue Analytics */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Revenue Chart */}
                 <div className="lg:col-span-2">
                     <ActivityChart data={revenueData} />
                 </div>
-                <div>
-                    <RecentActivity activities={recentActivies} />
+
+                {/* Trend & Metrics Card */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
+                    <div>
+                        <h3 className="text-lg font-bold text-gray-800 mb-4">Revenue Analytics</h3>
+                        
+                        {/* Revenue Trend */}
+                        <div className="p-4 bg-slate-50 rounded-lg space-y-2 mb-6">
+                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Revenue Trend</p>
+                            <div className="flex items-center gap-2">
+                                {stats.revenueTrend >= 0 ? (
+                                    <div className="flex items-center gap-1.5 text-green-600 bg-green-50 px-2 py-1 rounded font-bold text-sm">
+                                        <ArrowUpRight className="w-4 h-4" />
+                                        <span>+{stats.revenueTrend}%</span>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-1.5 text-red-600 bg-red-50 px-2 py-1 rounded font-bold text-sm">
+                                        <ArrowDownRight className="w-4 h-4" />
+                                        <span>{stats.revenueTrend}%</span>
+                                    </div>
+                                )}
+                                <span className="text-xs text-gray-500">vs last month's collections</span>
+                            </div>
+                        </div>
+
+                        {/* Collection Metrics */}
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span className="text-sm text-gray-500 font-medium">Average payment value</span>
+                                <span className="font-bold text-gray-900">₹{stats.avgPaymentAmount.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span className="text-sm text-gray-500 font-medium">Transactions processed</span>
+                                <span className="font-bold text-gray-900">{stats.totalTransactions} this month</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* D. Recent Payments */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                    <h2 className="text-lg font-bold text-gray-800">Recent Payments</h2>
+                    <span className="text-xs bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full font-bold">Latest 10 Transactions</span>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead className="bg-gray-50 border-b border-gray-200">
+                            <tr>
+                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Member Name</th>
+                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Amount</th>
+                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Payment Method</th>
+                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Date</th>
+                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                            {recentPayments.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">No recent payments.</td>
+                                </tr>
+                            ) : (
+                                recentPayments.map((p) => (
+                                    <tr key={p.id} className="hover:bg-gray-50">
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex items-center gap-2.5">
+                                                <div className="w-8 h-8 bg-indigo-50 text-indigo-700 rounded-full flex items-center justify-center font-bold text-sm uppercase">
+                                                    {p.members?.full_name?.charAt(0) || 'M'}
+                                                </div>
+                                                <span className="font-semibold text-gray-900">{p.members?.full_name || 'Deleted Member'}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap font-bold text-gray-950">
+                                            ₹{Number(p.amount).toLocaleString('en-IN')}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap capitalize text-gray-600">
+                                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                                p.method === 'cash' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                                p.method === 'upi' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
+                                                'bg-slate-50 text-slate-700 border border-slate-200'
+                                            }`}>
+                                                {p.method}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-gray-600">
+                                            {p.date}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm max-w-[200px] truncate">
+                                            {p.admin_note || '-'}
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* E. Recent Activity */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-bold text-gray-800">Recent Activity</h3>
+                    <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full font-bold">Chronological Timeline</span>
+                </div>
+                <div className="space-y-4">
+                    {recentActivities.length === 0 ? (
+                        <p className="text-gray-400 text-sm">No recent activity.</p>
+                    ) : (
+                        recentActivities.map((item) => (
+                            <div key={item.id} className="flex items-center gap-4 py-2 border-b border-gray-50 last:border-0 hover:bg-slate-50/50 rounded-lg px-2 transition-colors">
+                                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border border-gray-100 shadow-inner">
+                                    {item.avatar ? (
+                                        <img src={item.avatar} alt={item.member} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm uppercase">
+                                            {item.member.charAt(0)}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-semibold text-gray-900">{item.member}</span>
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                            item.id.startsWith('checkin') ? 'bg-green-50 text-green-700 border border-green-200' :
+                                            item.id.startsWith('renewal') ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
+                                            'bg-red-50 text-red-700 border border-red-200'
+                                        }`}>
+                                            {item.id.startsWith('checkin') ? 'Check-In' :
+                                             item.id.startsWith('renewal') ? 'Renewal' : 'Expiry'}
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-gray-600 mt-0.5">
+                                        {item.action}
+                                    </p>
+                                </div>
+                                <div className="text-right text-xs text-gray-400 font-medium">
+                                    {item.time}
+                                </div>
+                            </div>
+                        ))
+                    )}
                 </div>
             </div>
         </div>
@@ -151,3 +404,4 @@ const Dashboard: React.FC = () => {
 };
 
 export default Dashboard;
+

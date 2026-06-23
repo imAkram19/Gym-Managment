@@ -1,6 +1,9 @@
 import { supabase } from '../supabase';
 
 export const getDashboardStats = async () => {
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+
     // 1. Total Active Members
     const { count: activeMembers, error: membersError } = await supabase
         .from('members')
@@ -12,62 +15,214 @@ export const getDashboardStats = async () => {
     // 2. Members expiring soon (next 7 days)
     const sevenDaysFromNow = new Date();
     sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+    const sevenDaysStr = sevenDaysFromNow.toISOString().split('T')[0];
 
     const { count: expiringSoon, error: expiringError } = await supabase
         .from('subscriptions')
         .select('*', { count: 'exact', head: true })
         .eq('is_active', true)
-        .lte('end_date', sevenDaysFromNow.toISOString().split('T')[0])
-        .gte('end_date', new Date().toISOString().split('T')[0]);
+        .lte('end_date', sevenDaysStr)
+        .gte('end_date', todayStr);
 
     if (expiringError) console.error('Error fetching expiring subscriptions:', expiringError);
 
-    // 3. Total Revenue (This Month)
-    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-    const { data: payments, error: revenueError } = await supabase
+    // 3. Attendance Rate Today
+    const { count: todaysAttendanceCount, error: attError } = await supabase
+        .from('attendance')
+        .select('*', { count: 'exact', head: true })
+        .eq('date', todayStr);
+
+    if (attError) console.error('Error fetching today\'s attendance:', attError);
+
+    const activeCount = activeMembers || 0;
+    const attendanceRate = activeCount > 0 ? Math.round(((todaysAttendanceCount || 0) / activeCount) * 100) : 0;
+
+    // 4. Financial Calculations
+    // A. Total Collections (All-time)
+    const { data: allPayments, error: allPaymentsError } = await supabase
         .from('payments')
-        .select('amount')
+        .select('amount');
+
+    if (allPaymentsError) console.error('Error fetching all-time payments:', allPaymentsError);
+    const totalCollections = allPayments?.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) || 0;
+
+    // B. Monthly Financial Breakdown
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    const { data: monthlyPayments, error: monthlyPaymentsError } = await supabase
+        .from('payments')
+        .select('amount, method')
         .gte('date', startOfMonth);
 
-    if (revenueError) console.error('Error fetching revenue:', revenueError);
+    if (monthlyPaymentsError) console.error('Error fetching monthly payments:', monthlyPaymentsError);
 
-    const monthlyRevenue = payments?.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) || 0;
+    const monthlyPaymentsData = monthlyPayments || [];
+    const monthlyRevenue = monthlyPaymentsData.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const cashPayments = monthlyPaymentsData.filter(p => p.method === 'cash').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const upiPayments = monthlyPaymentsData.filter(p => p.method === 'upi').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const otherPayments = monthlyPaymentsData.filter(p => p.method !== 'cash' && p.method !== 'upi').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+    // C. Monthly Revenue Trend (vs last month)
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
+    const { data: lastMonthPayments, error: lastMonthError } = await supabase
+        .from('payments')
+        .select('amount')
+        .gte('date', startOfLastMonth)
+        .lte('date', endOfLastMonth);
+
+    if (lastMonthError) console.error('Error fetching last month payments:', lastMonthError);
+    const lastMonthRevenue = lastMonthPayments?.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) || 0;
+    
+    let revenueTrend = 0;
+    if (lastMonthRevenue > 0) {
+        revenueTrend = Math.round(((monthlyRevenue - lastMonthRevenue) / lastMonthRevenue) * 100);
+    }
+
+    // D. Collection Metrics
+    const totalTransactions = monthlyPaymentsData.length;
+    const avgPaymentAmount = totalTransactions > 0 ? Math.round(monthlyRevenue / totalTransactions) : 0;
 
     return {
-        activeMembers: activeMembers || 0,
+        activeMembers: activeCount,
         expiringSoon: expiringSoon || 0,
-        monthlyRevenue: monthlyRevenue
+        attendanceRate,
+        monthlyRevenue,
+        totalCollections,
+        cashPayments,
+        upiPayments,
+        otherPayments,
+        revenueTrend,
+        avgPaymentAmount,
+        totalTransactions
     };
 };
 
-export const getRecentActivity = async () => {
+export const getRecentPayments = async (limit = 10) => {
     const { data, error } = await supabase
+        .from('payments')
+        .select(`
+            id,
+            amount,
+            date,
+            method,
+            admin_note,
+            members (id, full_name, image_url)
+        `)
+        .order('date', { ascending: false })
+        .limit(limit);
+
+    if (error) {
+        console.error('Error fetching recent payments:', error);
+        return [];
+    }
+
+    return data;
+};
+
+export const getCombinedRecentActivity = async () => {
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+
+    // 1. Fetch attendance check-ins
+    const { data: attendanceData, error: attendanceError } = await supabase
         .from('attendance')
         .select(`
             id,
             date,
             check_in_time,
+            created_at,
             members (full_name, image_url)
         `)
         .order('created_at', { ascending: false })
-        .limit(5);
+        .limit(10);
 
-    if (error) {
-        console.error('Error fetching recent activity:', error);
-        return [];
+    if (attendanceError) console.error('Error fetching recent attendance:', attendanceError);
+
+    // 2. Fetch renewals (recent subscriptions starting)
+    const { data: subscriptionData, error: subError } = await supabase
+        .from('subscriptions')
+        .select(`
+            id,
+            plan_name,
+            start_date,
+            created_at,
+            members (full_name, image_url)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+    if (subError) console.error('Error fetching recent subscriptions:', subError);
+
+    // 3. Fetch recent expiries (subscriptions ending)
+    const { data: expiryData, error: expiryError } = await supabase
+        .from('subscriptions')
+        .select(`
+            id,
+            plan_name,
+            end_date,
+            members (full_name, image_url)
+        `)
+        .lte('end_date', todayStr)
+        .order('end_date', { ascending: false })
+        .limit(10);
+
+    if (expiryError) console.error('Error fetching recent expiries:', expiryError);
+
+    const activities: any[] = [];
+
+    // Map check-ins
+    if (attendanceData) {
+        attendanceData.forEach((item: any) => {
+            if (!item.members) return;
+            activities.push({
+                id: `checkin-${item.id}`,
+                member: item.members.full_name,
+                avatar: item.members.image_url,
+                action: 'checked in',
+                time: `${item.date} ${item.check_in_time.slice(0, 5)}`,
+                timestamp: new Date(item.created_at || `${item.date}T${item.check_in_time}`).getTime()
+            });
+        });
     }
 
-    return data.map((item: any) => ({
-        id: item.id,
-        member: item.members.full_name,
-        avatar: item.members.image_url,
-        action: 'checked in',
-        time: `${item.date} ${item.check_in_time}`, // Simple formatting, can be improved
-    }));
+    // Map renewals
+    if (subscriptionData) {
+        subscriptionData.forEach((item: any) => {
+            if (!item.members) return;
+            activities.push({
+                id: `renewal-${item.id}`,
+                member: item.members.full_name,
+                avatar: item.members.image_url,
+                action: `renewed membership (${item.plan_name})`,
+                time: `${item.start_date}`,
+                timestamp: new Date(item.created_at || `${item.start_date}T00:00:00`).getTime()
+            });
+        });
+    }
+
+    // Map expiries
+    if (expiryData) {
+        expiryData.forEach((item: any) => {
+            if (!item.members) return;
+            activities.push({
+                id: `expiry-${item.id}`,
+                member: item.members.full_name,
+                avatar: item.members.image_url,
+                action: `membership expired (${item.plan_name})`,
+                time: `${item.end_date}`,
+                timestamp: new Date(`${item.end_date}T23:59:59`).getTime()
+            });
+        });
+    }
+
+    // Sort combined activities by timestamp desc
+    activities.sort((a, b) => b.timestamp - a.timestamp);
+
+    // Limit to 10 items
+    return activities.slice(0, 10);
 };
 
-// Mock data generator for the chart until we have enough real data
-// Fetch revenue for the last 7 days
+// Fetch revenue for the last 7 days for the chart
 export const getRevenueData = async () => {
     const today = new Date();
     const last7Days: string[] = [];
@@ -108,3 +263,4 @@ export const getRevenueData = async () => {
     // 4. Return formatted data
     return chartData.map(({ name, revenue }) => ({ name, revenue }));
 };
+
