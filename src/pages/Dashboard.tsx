@@ -6,9 +6,7 @@ import { RecentActivity } from '../components/dashboard/RecentActivity';
 import { getDashboardStats, getRecentActivity, getRevenueData } from '../lib/api/dashboard';
 
 const Dashboard: React.FC = () => {
-    const [isOwnerUnlocked, setIsOwnerUnlocked] = useState(() => {
-        return localStorage.getItem('irongym_owner_access') === 'true';
-    });
+    const [isOwnerUnlocked, setIsOwnerUnlocked] = useState(false);
     const [ownerPasswordInput, setOwnerPasswordInput] = useState('');
     const [showOwnerPassword, setShowOwnerPassword] = useState(false);
     const [ownerError, setOwnerError] = useState('');
@@ -48,7 +46,6 @@ const Dashboard: React.FC = () => {
         e.preventDefault();
         const expectedOwnerPassword = import.meta.env.VITE_OWNER_PASSWORD || 'iron';
         if (ownerPasswordInput === expectedOwnerPassword) {
-            localStorage.setItem('irongym_owner_access', 'true');
             setIsOwnerUnlocked(true);
         } else {
             setOwnerError('Incorrect password. Access denied.');
