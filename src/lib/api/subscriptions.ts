@@ -70,4 +70,10 @@ export const expireSubscription = async (id: string) => {
         .eq('id', id);
 
     if (error) throw error;
+
+    // Immediately sync member statuses so the member status updates to 'expired'
+    // and biometric_enrollments.sync_status changes to 'needs_deletion',
+    // which triggers the sync agent to remove the fingerprint from the K40 device.
+    const { error: syncError } = await supabase.rpc('sync_member_statuses');
+    if (syncError) console.error('Failed to sync member statuses:', syncError);
 };

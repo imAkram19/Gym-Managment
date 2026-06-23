@@ -108,7 +108,10 @@ const MemberDetail: React.FC = () => {
                     <div className="flex flex-wrap justify-center md:justify-start gap-4 mt-2 text-gray-500 text-sm">
                         <span className="flex items-center gap-1"><Phone className="w-4 h-4" /> {member.phone}</span>
                         <span className="flex items-center gap-1 capitalize"><User className="w-4 h-4" /> {member.gender || 'N/A'}</span>
-                        <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium text-xs uppercase self-center">
+                        <span className={clsx(
+                            "px-2 py-0.5 rounded-full font-medium text-xs uppercase self-center",
+                            member.status === 'active' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                        )}>
                             {member.status}
                         </span>
                     </div>
