@@ -25,6 +25,11 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
         price: '',
         durationMonths: 1,
         startDate: new Date().toISOString().split('T')[0],
+        endDate: (() => {
+            const date = new Date();
+            date.setMonth(date.getMonth() + 1);
+            return date.toISOString().split('T')[0];
+        })(),
         // Payment
         paymentMethod: 'cash',
         adminNote: ''
@@ -34,7 +39,24 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        setFormData(prev => {
+            const nextState = { ...prev, [name]: value };
+            
+            // Auto-calculate end date if duration or start date changes
+            if (name === 'startDate' || name === 'durationMonths') {
+                try {
+                    const start = new Date(nextState.startDate);
+                    if (!isNaN(start.getTime())) {
+                        start.setMonth(start.getMonth() + Number(nextState.durationMonths));
+                        nextState.endDate = start.toISOString().split('T')[0];
+                    }
+                } catch (err) {
+                    // ignore
+                }
+            }
+            
+            return nextState;
+        });
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -57,6 +79,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
                     price: Number(formData.price),
                     durationMonths: Number(formData.durationMonths),
                     startDate: formData.startDate,
+                    endDate: formData.endDate,
                 },
                 {
                     amount: Number(formData.price), // Payment amount equals plan price for initial
@@ -208,6 +231,17 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
                                     required
                                     name="startDate"
                                     value={formData.startDate}
+                                    onChange={handleChange}
+                                    type="date"
+                                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
+                                <input
+                                    required
+                                    name="endDate"
+                                    value={formData.endDate}
                                     onChange={handleChange}
                                     type="date"
                                     className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900"

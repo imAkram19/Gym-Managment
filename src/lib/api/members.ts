@@ -90,10 +90,25 @@ export const getMemberHistory = async (id: string) => {
 
 export const createMemberWithSubscription = async (
     memberData: Omit<Member, 'id' | 'joinDate' | 'status' | 'created_at'>,
-    subscriptionData: { planName: string; price: number; durationMonths: number; startDate: string },
+    subscriptionData: { planName: string; price: number; durationMonths: number; startDate: string; endDate?: string },
     paymentData: { amount: number; method: string; adminNote?: string }
 ) => {
-    // 1. Create Member
+    // 1. Calculate End Date and Check Activity
+    let finalEndDateStr = '';
+    if (subscriptionData.endDate) {
+        finalEndDateStr = subscriptionData.endDate;
+    } else {
+        const startDate = new Date(subscriptionData.startDate);
+        const endDate = new Date(startDate);
+        endDate.setMonth(endDate.getMonth() + subscriptionData.durationMonths);
+        finalEndDateStr = endDate.toISOString().split('T')[0];
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const isSubscriptionActive = finalEndDateStr >= todayStr;
+    const initialMemberStatus = isSubscriptionActive ? 'active' : 'expired';
+
+    // 2. Create Member
     const { data: member, error: memberError } = await supabase
         .from('members')
         .insert([{
@@ -103,7 +118,7 @@ export const createMemberWithSubscription = async (
             date_of_birth: memberData.dateOfBirth,
             address: memberData.address,
             info: memberData.info,
-            status: 'active',
+            status: initialMemberStatus,
             join_date: new Date().toISOString().split('T')[0]
         }])
         .select()
@@ -113,11 +128,6 @@ export const createMemberWithSubscription = async (
 
     const memberId = member.id;
 
-    // 2. Calculate End Date
-    const startDate = new Date(subscriptionData.startDate);
-    const endDate = new Date(startDate);
-    endDate.setMonth(endDate.getMonth() + subscriptionData.durationMonths);
-
     // 3. Create Subscription
     const { error: subError } = await supabase
         .from('subscriptions')
@@ -126,8 +136,8 @@ export const createMemberWithSubscription = async (
             plan_name: subscriptionData.planName,
             price: subscriptionData.price,
             start_date: subscriptionData.startDate,
-            end_date: endDate.toISOString().split('T')[0],
-            is_active: true
+            end_date: finalEndDateStr,
+            is_active: isSubscriptionActive
         }]);
 
     if (subError) {
