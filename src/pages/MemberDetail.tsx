@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Phone, MapPin, Calendar, Activity, Clock, Fingerprint, Link, Unlink, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, User, Phone, MapPin, Calendar, Activity, Clock, Fingerprint, Link, Unlink, AlertTriangle, MessageSquare } from 'lucide-react';
 import { getMemberById, getMemberHistory, restoreMember } from '../lib/api/members';
 import { getEnrollmentByMemberId, enrollMemberBiometrics, deleteBiometricEnrollment, checkDeviceUserIdMapping } from '../lib/api/biometrics';
 import { expireSubscription } from '../lib/api/subscriptions';
@@ -91,7 +91,7 @@ const MemberDetail: React.FC = () => {
                 const today = new Date();
                 const endDate = new Date(latestSub.endDate);
                 let newEndDate = latestSub.endDate;
-                
+
                 if (endDate < today) {
                     const futureDate = new Date();
                     futureDate.setMonth(futureDate.getMonth() + 1);
@@ -244,15 +244,56 @@ const MemberDetail: React.FC = () => {
                 <div className="flex-1 text-center md:text-left">
                     <h1 className="text-2xl font-bold text-gray-900">{member.fullName}</h1>
                     <div className="flex flex-wrap justify-center md:justify-start gap-4 mt-2 text-gray-500 text-sm">
-                        <span className="flex items-center gap-1"><Phone className="w-4 h-4" /> {member.phone || 'No phone'}</span>
+                        <span className="flex items-center gap-1.5">
+                            <Phone className="w-4 h-4" />
+                            <span>{member.phone || 'No phone'}</span>
+                            {member.phone && (
+                                <a
+                                    href={(() => {
+                                        let cleanPhone = member.phone.replace(/\D/g, '');
+                                        if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
+
+                                        const msg = member.status === 'expired'
+                                            ? `🚨 Hi ${member.fullName},
+
+Your Iron Gym membership has expired.
+
+💪 Your goals are waiting for you! Renew today and get back to crushing your workouts.
+
+✨ Don't miss out on your routine, progress, and gym access.
+
+📞 Reply or visit the front desk to renew.
+
+🔥 Iron Gym Team`
+                                            : `⚡ Hi ${member.fullName},
+
+🚨 Your Iron Gym membership will expire soon.
+
+🏋️‍♂️ Renew now to avoid any interruption in your workouts and gym access.
+
+💪 Consistency is the key to results—keep the momentum going!
+
+🔥 Iron Gym Team`;
+
+                                        return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+                                    })()}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-emerald-500 hover:text-emerald-600 p-0.5 hover:bg-emerald-50 rounded transition-colors flex items-center justify-center cursor-pointer"
+                                    title="Send WhatsApp Alert"
+                                >
+                                    <MessageSquare className="w-4 h-4" />
+                                </a>
+                            )}
+                        </span>
                         <span className="flex items-center gap-1 capitalize"><User className="w-4 h-4" /> {member.gender || 'N/A'}</span>
                         <span className={clsx(
                             "px-2.5 py-0.5 rounded-full font-semibold text-xs border uppercase self-center shadow-sm",
-                            member.deletedAt 
-                                ? "bg-purple-50 text-purple-700 border-purple-200" 
-                                : member.status === 'active' 
-                                ? "bg-green-50 text-green-700 border-green-200" 
-                                : "bg-red-50 text-red-700 border-red-200"
+                            member.deletedAt
+                                ? "bg-purple-50 text-purple-700 border-purple-200"
+                                : member.status === 'active'
+                                    ? "bg-green-50 text-green-700 border-green-200"
+                                    : "bg-red-50 text-red-700 border-red-200"
                         )}>
                             {member.deletedAt ? 'Archived' : member.status}
                         </span>
@@ -261,14 +302,14 @@ const MemberDetail: React.FC = () => {
                 <div className="flex flex-wrap gap-2 md:self-center">
                     {member.deletedAt ? (
                         <>
-                            <button 
+                            <button
                                 onClick={handleRestoreMember}
                                 disabled={isRestoring}
                                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50"
                             >
                                 {isRestoring ? 'Restoring...' : 'Restore Member'}
                             </button>
-                            <button 
+                            <button
                                 onClick={() => setIsDeleteModalOpen(true)}
                                 className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300 font-semibold rounded-lg transition-colors"
                             >
@@ -277,14 +318,14 @@ const MemberDetail: React.FC = () => {
                         </>
                     ) : (
                         <>
-                            <button 
+                            <button
                                 onClick={() => setIsEditModalOpen(true)}
                                 className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-semibold transition-colors"
                             >
                                 Edit Profile
                             </button>
                             {history.subscriptions.length > 0 && (
-                                <button 
+                                <button
                                     onClick={() => setIsExtendModalOpen(true)}
                                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold transition-colors"
                                 >
@@ -292,14 +333,14 @@ const MemberDetail: React.FC = () => {
                                 </button>
                             )}
                             {member.status === 'active' ? (
-                                <button 
+                                <button
                                     onClick={handleForceExpire}
                                     className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold transition-colors"
                                 >
                                     Force Expire
                                 </button>
                             ) : (
-                                <button 
+                                <button
                                     onClick={handleActivate}
                                     className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors"
                                 >
@@ -312,7 +353,7 @@ const MemberDetail: React.FC = () => {
                             >
                                 Renew Plan
                             </button>
-                            <button 
+                            <button
                                 onClick={() => setIsDeleteModalOpen(true)}
                                 className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300 font-semibold rounded-lg transition-colors"
                             >
@@ -468,7 +509,7 @@ const MemberDetail: React.FC = () => {
                                     <div className="bg-gray-50 border border-gray-100 p-6 rounded-xl">
                                         <p className="text-sm font-medium text-gray-700">No Biometric Fingerprint Linked</p>
                                         <p className="text-xs text-gray-400 mt-1 mb-4">Enroll this member's fingerprint on the physical device, then enter their keypad ID below to link them.</p>
-                                        
+
                                         <form onSubmit={handleLinkBiometrics} className="flex flex-col sm:flex-row gap-3 max-w-md">
                                             <input
                                                 type="number"

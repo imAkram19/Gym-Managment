@@ -1,324 +1,705 @@
-import React, { useEffect, useState } from 'react';
-import { Fingerprint, Clock, CheckCircle, XCircle } from 'lucide-react';
-import { getTodaysAttendance, checkInMember } from '../lib/api/attendance';
-import { getBiometricEnrollments } from '../lib/api/biometrics';
-import type { BiometricEnrollmentWithMember } from '../lib/api/biometrics';
-import { clsx } from 'clsx';
-import { supabase } from '../lib/supabase';
+import React, { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+    Flame, TrendingUp, Calendar, Clock, Search, Award, UserX, BarChart2,
+    AlertTriangle, User, Trophy, MessageSquare, Fingerprint, RefreshCw,
+    ArrowLeft, Eye, X
+} from 'lucide-react';
+import { getMemberAttendanceMetrics, getTodaysAttendance, getMemberAttendanceHistory } from '../lib/api/attendance';
+import type { MemberAttendanceStat } from '../lib/api/attendance';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatDate(iso: string | null): string {
+    if (!iso) return 'Never';
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function getStreakColor(streak: number): string {
+    if (streak === 0) return 'text-gray-400';
+    if (streak <= 3) return 'text-amber-500';
+    if (streak <= 7) return 'text-orange-500';
+    return 'text-red-500';
+}
+
+function getAttendanceHealthColor(avg: number): { bg: string; text: string; label: string } {
+    if (avg >= 4) return { bg: 'bg-emerald-50 border-emerald-200', text: 'text-emerald-700', label: 'Excellent' };
+    if (avg >= 2.5) return { bg: 'bg-sky-50 border-sky-200', text: 'text-sky-700', label: 'Good' };
+    if (avg >= 1) return { bg: 'bg-amber-50 border-amber-200', text: 'text-amber-700', label: 'Fair' };
+    return { bg: 'bg-red-50 border-red-200', text: 'text-red-700', label: 'Low' };
+}
+
+const getWhatsAppLink = (phone: string, text: string) => {
+    let cleanPhone = phone.replace(/\D/g, '');
+    if (!cleanPhone) return '';
+    if (cleanPhone.length === 10) {
+        cleanPhone = '91' + cleanPhone;
+    }
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+};
+
+function formatTime12h(timeStr: string | null): string {
+    if (!timeStr) return '—';
+    try {
+        const parts = timeStr.split(':');
+        let hours = parseInt(parts[0], 10);
+        const minutes = parts[1];
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12; // the hour '0' should be '12'
+        return `${hours}:${minutes} ${ampm}`;
+    } catch {
+        return timeStr;
+    }
+}
+
+function MiniHeatmap({ recentDates }: { recentDates: string[] }) {
+    const dateSet = new Set(recentDates);
+    const days: { iso: string; active: boolean }[] = [];
+    const today = new Date();
+    for (let i = 27; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - i);
+        const iso = d.toISOString().split('T')[0];
+        days.push({ iso, active: dateSet.has(iso) });
+    }
+
+    return (
+        <div className="grid grid-cols-7 gap-0.5" title="Last 28 days attendance visual map">
+            {days.map((day) => (
+                <div
+                    key={day.iso}
+                    title={day.iso + (day.active ? ' (Attended)' : ' (Missed)')}
+                    className={`w-3.5 h-3.5 rounded-[3px] border-[0.5px] border-white/50 transition-colors ${day.active ? 'bg-indigo-500' : 'bg-slate-100'}`}
+                />
+            ))}
+        </div>
+    );
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────────
 
 const Attendance: React.FC = () => {
-    const [identifier, setIdentifier] = useState('');
-    const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
-    const [message, setMessage] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [logs, setLogs] = useState<any[]>([]);
-    const [enrolledMembers, setEnrolledMembers] = useState<BiometricEnrollmentWithMember[]>([]);
-    const [selectedDeviceUserId, setSelectedDeviceUserId] = useState<string>('');
-    const [expiringCount, setExpiringCount] = useState(0);
+    const navigate = useNavigate();
+    const [stats, setStats] = useState<MemberAttendanceStat[]>([]);
+    const [todaysLogs, setTodaysLogs] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [refreshingLogs, setRefreshingLogs] = useState(false);
+    const [search, setSearch] = useState('');
+    const [activeTab, setActiveTab] = useState<'all' | 'leaderboard' | 'inactive'>('all');
 
-    const fetchLogs = async () => {
-        const data = await getTodaysAttendance();
-        setLogs(data);
-    };
+    // Single member selection states for detailed history view in right panel
+    const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+    const [memberHistory, setMemberHistory] = useState<any[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
 
-    const fetchEnrolled = async () => {
+    const loadData = async () => {
         try {
-            const data = await getBiometricEnrollments();
-            setEnrolledMembers(data);
-            if (data.length > 0) {
-                setSelectedDeviceUserId(data[0].deviceUserId.toString());
-            }
-        } catch (err) {
-            console.error("Failed to load enrolled members for simulation", err);
+            const [statData, todayData] = await Promise.all([
+                getMemberAttendanceMetrics(),
+                getTodaysAttendance()
+            ]);
+            setStats(statData);
+            setTodaysLogs(todayData);
+        } catch (error) {
+            console.error("Failed to load attendance page data", error);
+        } finally {
+            setLoading(false);
         }
     };
 
-    const fetchExpiringCount = async () => {
+    const handleRefreshLogs = async () => {
+        setRefreshingLogs(true);
         try {
-            const sevenDaysFromNow = new Date();
-            sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
-            const sevenDaysStr = sevenDaysFromNow.toISOString().split('T')[0];
-            const todayStr = new Date().toISOString().split('T')[0];
-
-            const { count, error } = await supabase
-                .from('subscriptions')
-                .select('*', { count: 'exact', head: true })
-                .eq('is_active', true)
-                .lte('end_date', sevenDaysStr)
-                .gte('end_date', todayStr);
-
-            if (!error && count !== null) {
-                setExpiringCount(count);
-            }
-        } catch (err) {
-            console.error("Failed to fetch expiring count", err);
+            const todayData = await getTodaysAttendance();
+            setTodaysLogs(todayData);
+        } catch (error) {
+            console.error("Failed to refresh logs", error);
+        } finally {
+            setRefreshingLogs(false);
         }
     };
 
     useEffect(() => {
-        fetchLogs();
-        fetchEnrolled();
-        fetchExpiringCount();
+        loadData();
     }, []);
 
-    const handleCheckIn = async (method: 'manual' | 'fingerprint') => {
-        if (!identifier && method === 'manual') return;
-
-        setLoading(true);
-        setStatus('idle');
-        setMessage('');
-
-        try {
-            if (method === 'fingerprint') {
-                if (!selectedDeviceUserId) {
-                    throw new Error("No members are enrolled in biometrics. Please enroll a member first.");
-                }
-
-                // Call the local simulator agent running on reception PC (localhost:4371)
-                try {
-                    const response = await fetch('http://localhost:4371/simulate-scan', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ deviceUserId: parseInt(selectedDeviceUserId, 10) })
-                    });
-                    
-                    const result = await response.json();
-                    if (result.success) {
-                        setStatus('success');
-                        setMessage(result.message || "Simulated check-in successful!");
-                    } else {
-                        setStatus('error');
-                        setMessage(result.message || "Access denied by biometric agent.");
-                    }
-                } catch (netErr) {
-                    throw new Error("Unable to connect to local sync agent. Please ensure you have run 'npm start' inside the 'sync-agent/' directory on port 4371.");
-                }
-            } else {
-                const result = await checkInMember(identifier, method);
-                setStatus('success');
-                setMessage(`Welcome, ${result.memberName}!`);
-                setIdentifier('');
-            }
-            fetchLogs(); // Refresh list
-            fetchExpiringCount(); // Refresh expiring count
-        } catch (err: any) {
-            setStatus('error');
-            setMessage(err.message || "Check-in failed");
-        } finally {
-            setLoading(false);
-            // Clear status after 5 seconds for simulator messages
-            setTimeout(() => {
-                setStatus('idle');
-                setMessage('');
-            }, 5000);
+    // Load member detailed check-in history when selected
+    useEffect(() => {
+        if (!selectedMemberId) {
+            setMemberHistory([]);
+            return;
         }
-    };
+        setLoadingHistory(true);
+        getMemberAttendanceHistory(selectedMemberId)
+            .then(data => {
+                setMemberHistory(data);
+                setLoadingHistory(false);
+            })
+            .catch(err => {
+                console.error(err);
+                setLoadingHistory(false);
+            });
+    }, [selectedMemberId]);
 
-    const getPeakHour = (logs: any[]) => {
-        if (!logs || logs.length === 0) return 'N/A';
-        const hourCounts: { [key: number]: number } = {};
-        logs.forEach(log => {
-            if (!log.check_in_time) return;
-            const parts = log.check_in_time.split(':');
-            if (parts.length > 0) {
-                const hour = parseInt(parts[0], 10);
-                if (!isNaN(hour)) {
-                    hourCounts[hour] = (hourCounts[hour] || 0) + 1;
-                }
-            }
-        });
+    // Find details of the selected member from the loaded stats
+    const selectedMemberStat = useMemo(() => {
+        return stats.find(s => s.memberId === selectedMemberId) || null;
+    }, [stats, selectedMemberId]);
 
-        if (Object.keys(hourCounts).length === 0) return 'N/A';
+    // ── Summary KPIs ──────────────────────────────────────────────────────────
+    const summary = useMemo(() => {
+        if (stats.length === 0) return null;
+        const total = stats.length;
+        const checkedInToday = stats.filter(s => s.daysSinceLastVisit === 0).length;
+        const inactive = stats.filter(s => (s.daysSinceLastVisit ?? 999) > 10).length;
+        const onStreak = stats.filter(s => s.currentStreak >= 3).length;
+        const avgPerWeek = stats.reduce((acc, s) => acc + s.avgVisitsPerWeek, 0) / total;
+        return { total, checkedInToday, inactive, onStreak, avgPerWeek: avgPerWeek.toFixed(1) };
+    }, [stats]);
 
-        let peakHour = 6;
-        let maxCount = 0;
-        Object.keys(hourCounts).forEach(h => {
-            const hour = parseInt(h, 10);
-            if (hourCounts[hour] > maxCount) {
-                maxCount = hourCounts[hour];
-                peakHour = hour;
-            }
-        });
-        const startHour = peakHour;
-        const endHour = (peakHour + 1) % 24;
-        const formatHour = (h: number) => {
-            const ampm = h >= 12 ? 'PM' : 'AM';
-            const displayHour = h % 12 || 12;
-            return `${displayHour.toString().padStart(2, '0')}:00 ${ampm}`;
+    // ── Filtered + Sorted list ─────────────────────────────────────────────────
+    const displayed = useMemo(() => {
+        let list = [...stats];
+
+        if (search.trim()) {
+            const q = search.toLowerCase();
+            list = list.filter(s => s.fullName.toLowerCase().includes(q));
+        }
+
+        if (activeTab === 'inactive') {
+            list = list.filter(s => (s.daysSinceLastVisit ?? 999) > 10);
+        }
+
+        // Default sorting: total visits descending
+        list.sort((a, b) => b.totalVisits - a.totalVisits);
+
+        return list;
+    }, [stats, search, activeTab]);
+
+    // Leaderboards
+    const leaderboardData = useMemo(() => {
+        const sortedByMonth = [...stats].sort((a, b) => b.visitsThisMonth - a.visitsThisMonth);
+        const sortedByStreak = [...stats].sort((a, b) => b.currentStreak - a.currentStreak);
+        const sortedByInactive = [...stats]
+            .filter(s => s.lastCheckIn !== null)
+            .sort((a, b) => (b.daysSinceLastVisit ?? 0) - (a.daysSinceLastVisit ?? 0));
+
+        return {
+            topMonthly: sortedByMonth.slice(0, 5),
+            topStreak: sortedByStreak.filter(s => s.currentStreak > 0).slice(0, 5),
+            mostInactive: sortedByInactive.slice(0, 5)
         };
-        return `${formatHour(startHour)} - ${formatHour(endHour)}`;
-    };
+    }, [stats]);
 
-    const activePresentCount = logs.filter(log => log.members?.status === 'active').length;
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-[60vh]">
+                <div className="text-center space-y-3">
+                    <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                    <p className="text-gray-500 text-sm font-medium">Loading attendance metrics…</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-bold text-gray-900">Attendance & Access</h1>
-                <p className="text-gray-500 text-sm">Reception desk check-in system and real-time operations.</p>
-            </div>
-
-            {/* Row of 4 Compact Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Today's Check-ins */}
-                <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Today's Check-ins</p>
-                    <p className="text-3xl font-bold mt-2 text-gray-900">{logs.length}</p>
-                </div>
-                
-                {/* Active Members Present */}
-                <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Active Members Present</p>
-                    <p className="text-3xl font-bold mt-2 text-gray-900">{activePresentCount}</p>
-                </div>
-
-                {/* Peak Hour */}
-                <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Peak Hour</p>
-                    <p className="text-lg font-bold mt-3.5 text-gray-900 truncate">{getPeakHour(logs)}</p>
-                </div>
-
-                {/* Expiring Members */}
-                <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Expiring Members</p>
-                    <p className="text-3xl font-bold mt-2 text-gray-900">{expiringCount}</p>
+        <div className="space-y-6 pb-12">
+            {/* ── Header ── */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">Attendance Metrics</h1>
+                    <p className="text-gray-500 text-sm mt-0.5">Track individual visit frequencies, streaks, and identify inactive members.</p>
                 </div>
             </div>
 
-            {/* Quick Check-In Panel (Full Width) */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 space-y-6">
-                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2 border-b border-gray-150 pb-3">
-                    <Fingerprint className="w-5 h-5 text-indigo-600" />
-                    Quick Check-in
-                </h2>
-
-                {/* Status Message */}
-                {status !== 'idle' && (
-                    <div className={clsx(
-                        "p-4 rounded-lg flex items-center gap-3 border text-sm font-medium",
-                        status === 'success' ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200"
-                    )}>
-                        {status === 'success' ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-                        <span>{message}</span>
+            {/* ── KPI Cards ── */}
+            {summary && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex flex-col gap-1 hover:shadow-md transition-shadow">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Tracked Members</p>
+                        <p className="text-3xl font-extrabold text-gray-900">{summary.total}</p>
                     </div>
-                )}
+                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex flex-col gap-1 hover:shadow-md transition-shadow">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-emerald-500" /> Checked In Today
+                        </p>
+                        <p className="text-3xl font-extrabold text-emerald-600">{summary.checkedInToday}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex flex-col gap-1 hover:shadow-md transition-shadow">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                            <Flame className="w-3.5 h-3.5 text-orange-500" /> On Streak (3d+)
+                        </p>
+                        <p className="text-3xl font-extrabold text-orange-500">{summary.onStreak}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex flex-col gap-1 hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveTab('inactive')}>
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                            <AlertTriangle className="w-3.5 h-3.5 text-red-500" /> Inactive (10d+)
+                        </p>
+                        <p className="text-3xl font-extrabold text-red-500">{summary.inactive}</p>
+                    </div>
+                </div>
+            )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-                    {/* Left: Manual Entry */}
-                    <div className="space-y-3">
-                        <label className="block text-sm font-bold text-gray-700 uppercase tracking-wider">Phone / Member ID</label>
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                value={identifier}
-                                onChange={(e) => setIdentifier(e.target.value)}
-                                placeholder="Enter member phone number or ID..."
-                                className="flex-1 p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-slate-50 focus:bg-white transition-colors"
-                                onKeyDown={(e) => e.key === 'Enter' && handleCheckIn('manual')}
-                            />
-                            <button
-                                onClick={() => handleCheckIn('manual')}
-                                disabled={loading || !identifier}
-                                className="px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm shadow-sm transition-colors cursor-pointer"
-                            >
-                                Check In
-                            </button>
+            {/* ── Sub Navigation Tabs ── */}
+            <div className="flex border-b border-gray-200 gap-6">
+                <button
+                    onClick={() => { setActiveTab('all'); setSelectedMemberId(null); }}
+                    className={`pb-3 font-semibold text-sm border-b-2 transition-colors cursor-pointer ${activeTab === 'all' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                >
+                    All Member Stats
+                </button>
+                <button
+                    onClick={() => { setActiveTab('leaderboard'); setSelectedMemberId(null); }}
+                    className={`pb-3 font-semibold text-sm border-b-2 transition-colors cursor-pointer ${activeTab === 'leaderboard' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                >
+                    <span className="flex items-center gap-1.5">
+                        <Trophy className="w-4 h-4" /> Leaderboards
+                    </span>
+                </button>
+                <button
+                    onClick={() => { setActiveTab('inactive'); setSelectedMemberId(null); }}
+                    className={`pb-3 font-semibold text-sm border-b-2 transition-colors cursor-pointer ${activeTab === 'inactive' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                >
+                    <span className="flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4" /> Inactive / Needs Nudge
+                    </span>
+                </button>
+            </div>
+
+            {activeTab === 'leaderboard' ? (
+                /* ─── LEADERBOARD VIEW ─── */
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Top Monthly Attendees */}
+                    <div className="bg-white rounded-xl border border-gray-150 shadow-sm p-6 space-y-4">
+                        <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
+                            <Trophy className="w-5 h-5 text-amber-500" />
+                            <h3 className="font-bold text-gray-800">Most Visits (This Month)</h3>
                         </div>
-                    </div>
-
-                    {/* Right: Fingerprint Scanner */}
-                    <div className="space-y-3 border-t md:border-t-0 md:border-l border-gray-200 pt-6 md:pt-0 md:pl-8">
-                        <label className="block text-sm font-bold text-gray-700 uppercase tracking-wider">Fingerprint Scanner</label>
                         <div className="space-y-3">
-                            <select
-                                value={selectedDeviceUserId}
-                                onChange={e => setSelectedDeviceUserId(e.target.value)}
-                                className="w-full p-2.5 border border-gray-300 bg-slate-50 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
-                                disabled={loading || enrolledMembers.length === 0}
-                            >
-                                {enrolledMembers.length === 0 ? (
-                                    <option value="">No members enrolled yet</option>
-                                ) : (
-                                    enrolledMembers.map(m => (
-                                        <option key={m.id} value={m.deviceUserId}>
-                                            {m.memberName} (ID: {m.deviceUserId} - {m.memberStatus})
-                                        </option>
-                                    ))
-                                )}
-                            </select>
-
-                            <button
-                                onClick={() => handleCheckIn('fingerprint')}
-                                disabled={loading || enrolledMembers.length === 0}
-                                className="w-full py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-slate-300 disabled:text-slate-500 transition-all font-semibold flex items-center justify-center gap-2 group shadow-sm cursor-pointer"
-                            >
-                                <Fingerprint className="w-4 h-4 text-indigo-200 group-hover:text-white transition-transform" />
-                                Trigger Fingerprint Scan
-                            </button>
-                            <p className="text-[10px] text-center text-slate-400">Requires local sync agent running on port 4371</p>
+                            {leaderboardData.topMonthly.map((member, idx) => (
+                                <div
+                                    key={member.memberId}
+                                    onClick={() => navigate(`/members/${member.memberId}`)}
+                                    className="flex items-center justify-between p-2.5 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
+                                >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <span className={`w-5 font-bold text-xs ${idx === 0 ? 'text-amber-500 text-sm' : idx === 1 ? 'text-slate-400' : idx === 2 ? 'text-amber-700' : 'text-gray-400'}`}>
+                                            #{idx + 1}
+                                        </span>
+                                        <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                            {member.imageUrl ? (
+                                                <img src={member.imageUrl} alt={member.fullName} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <User className="w-4 h-4 text-indigo-400" />
+                                            )}
+                                        </div>
+                                        <p className="font-semibold text-xs text-gray-850 truncate">{member.fullName}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="font-bold text-xs text-gray-900">{member.visitsThisMonth} visits</p>
+                                        <p className="text-[9px] text-gray-400">Total: {member.totalVisits}</p>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
-                </div>
-            </div>
 
-            {/* Logs List */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="p-6 border-b border-gray-200">
-                    <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                        <Clock className="w-5 h-5 text-gray-500" />
-                        Today's Logs
-                    </h2>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead className="bg-gray-50 border-b border-gray-200">
-                            <tr>
-                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Time</th>
-                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Member</th>
-                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Method</th>
-                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                            {logs.length === 0 ? (
-                                <tr>
-                                    <td colSpan={4} className="px-6 py-8 text-center text-gray-500">No check-ins yet today.</td>
-                                </tr>
+                    {/* Streak Leaderboard */}
+                    <div className="bg-white rounded-xl border border-gray-150 shadow-sm p-6 space-y-4">
+                        <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
+                            <Flame className="w-5 h-5 text-orange-500 animate-pulse" />
+                            <h3 className="font-bold text-gray-800">Consistency Streak</h3>
+                        </div>
+                        <div className="space-y-3">
+                            {leaderboardData.topStreak.length === 0 ? (
+                                <p className="text-gray-450 text-xs py-8 text-center">No active streaks today.</p>
                             ) : (
-                                logs.map((log) => (
-                                    <tr key={log.id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap text-gray-600 font-medium">
-                                            {log.check_in_time}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 text-xs overflow-hidden">
-                                                    {log.members?.image_url ? (
-                                                        <img src={log.members.image_url} alt="" className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        log.members?.full_name?.charAt(0) || '?'
-                                                    )}
-                                                </div>
-                                                <span className="font-medium text-gray-900">{log.members?.full_name || 'Unknown'}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-gray-500 capitalize">
-                                            {log.method}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700 border border-green-200">
-                                                Allowed
+                                leaderboardData.topStreak.map((member, idx) => (
+                                    <div
+                                        key={member.memberId}
+                                        onClick={() => navigate(`/members/${member.memberId}`)}
+                                        className="flex items-center justify-between p-2.5 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
+                                    >
+                                        <div className="flex items-center gap-2.5 min-w-0">
+                                            <span className="w-5 font-bold text-xs text-orange-500">
+                                                #{idx + 1}
                                             </span>
-                                        </td>
-                                    </tr>
+                                            <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                                {member.imageUrl ? (
+                                                    <img src={member.imageUrl} alt={member.fullName} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <User className="w-4 h-4 text-indigo-400" />
+                                                )}
+                                            </div>
+                                            <p className="font-semibold text-xs text-gray-850 truncate">{member.fullName}</p>
+                                        </div>
+                                        <div className="text-right flex items-center gap-1.5">
+                                            <span className="text-xs font-extrabold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-100">
+                                                🔥 {member.currentStreak} days
+                                            </span>
+                                        </div>
+                                    </div>
                                 ))
                             )}
-                        </tbody>
-                    </table>
+                        </div>
+                    </div>
+
+                    {/* Most Inactive (Needs Nudge) */}
+                    <div className="bg-white rounded-xl border border-gray-150 shadow-sm p-6 space-y-4">
+                        <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
+                            <AlertTriangle className="w-5 h-5 text-red-500" />
+                            <h3 className="font-bold text-gray-800">Longest Inactive</h3>
+                        </div>
+                        <div className="space-y-3">
+                            {leaderboardData.mostInactive.map((member, idx) => (
+                                <div
+                                    key={member.memberId}
+                                    onClick={() => navigate(`/members/${member.memberId}`)}
+                                    className="flex items-center justify-between p-2.5 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
+                                >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center overflow-hidden flex-shrink-0 border border-red-100">
+                                            {member.imageUrl ? (
+                                                <img src={member.imageUrl} alt={member.fullName} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <User className="w-4 h-4 text-red-400" />
+                                            )}
+                                        </div>
+                                        <p className="font-semibold text-xs text-gray-850 truncate">{member.fullName}</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="text-right">
+                                            <p className="font-bold text-xs text-red-700">{member.daysSinceLastVisit}d ago</p>
+                                            <p className="text-[9px] text-gray-400">{formatDate(member.lastCheckIn)}</p>
+                                        </div>
+                                        {member.phone && (
+                                            <a
+                                                href={getWhatsAppLink(member.phone, `Hi ${member.fullName}, we noticed you haven't visited the gym in a while. Hope everything is fine! We'd love to see you back on track.`)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="p-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 text-emerald-600 rounded transition-colors flex items-center justify-center cursor-pointer"
+                                                title="WhatsApp Nudge"
+                                            >
+                                                <MessageSquare className="w-3.5 h-3.5" />
+                                            </a>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
-            </div>
+            ) : (
+                /* ─── ALL MEMBER / INACTIVE VIEW WITH LIVE TODAY'S LOGS & HISTORY PANELS ─── */
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+                    {/* LEFT / MAIN COLUMN: Stats & Member Cards Grid (75%) */}
+                    <div className="lg:col-span-3 space-y-4">
+                        {/* Search and simple metadata bar */}
+                        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder={activeTab === 'inactive' ? "Search inactive member…" : "Search member stats…"}
+                                    value={search}
+                                    onChange={e => setSearch(e.target.value)}
+                                    className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-850 outline-none focus:ring-2 focus:ring-indigo-400"
+                                />
+                            </div>
+                            <div className="text-xs text-gray-400 font-semibold uppercase tracking-wider whitespace-nowrap hidden sm:block">
+                                Showing {displayed.length} members
+                            </div>
+                        </div>
+
+                        {/* Cards list */}
+                        {displayed.length === 0 ? (
+                            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-16 text-center">
+                                <BarChart2 className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                                <p className="text-gray-400 font-medium">No members found.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                {displayed.map((s) => {
+                                    const health = getAttendanceHealthColor(s.avgVisitsPerWeek);
+                                    const streakColor = getStreakColor(s.currentStreak);
+                                    const isInactive = (s.daysSinceLastVisit ?? 999) > 10;
+                                    const isSelected = selectedMemberId === s.memberId;
+
+                                    return (
+                                        <div
+                                            key={s.memberId}
+                                            onClick={() => setSelectedMemberId(s.memberId)}
+                                            className={`bg-white rounded-xl border p-5 hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer space-y-4 relative flex flex-col justify-between ${
+                                                isSelected ? 'ring-2 ring-indigo-500 border-transparent shadow-sm' : 'border-gray-100 shadow-sm'
+                                            }`}
+                                        >
+                                            <div className="space-y-4">
+                                                {/* Header */}
+                                                <div className="flex justify-between items-start gap-2">
+                                                    <div className="flex items-center gap-3 min-w-0">
+                                                        <div className="w-10 h-10 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                                            {s.imageUrl ? (
+                                                                <img src={s.imageUrl} alt={s.fullName} className="w-full h-full object-cover" />
+                                                            ) : (
+                                                                <User className="w-4.5 h-4.5 text-indigo-400" />
+                                                            )}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="font-bold text-xs text-gray-900 truncate">{s.fullName}</p>
+                                                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${health.bg} ${health.text}`}>
+                                                                {health.label}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div className="flex items-center gap-1">
+                                                        {isInactive && (
+                                                            <span className="px-1.5 py-0.5 bg-red-50 border border-red-200 text-red-650 text-[9px] font-bold rounded-full">
+                                                                Inactive
+                                                            </span>
+                                                        )}
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                navigate(`/members/${s.memberId}`);
+                                                            }}
+                                                            className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-650"
+                                                            title="View Profile"
+                                                        >
+                                                            <Eye className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Frequency Counts */}
+                                                <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                                                    <div className="bg-slate-50 rounded-lg py-1.5">
+                                                        <p className="text-sm font-extrabold text-gray-900">{s.totalVisits}</p>
+                                                        <p className="text-[8px] font-bold text-gray-400 uppercase">Total</p>
+                                                    </div>
+                                                    <div className="bg-indigo-50/50 border border-indigo-100/30 rounded-lg py-1.5">
+                                                        <p className="text-sm font-extrabold text-indigo-700">{s.visitsThisMonth}</p>
+                                                        <p className="text-[8px] font-bold text-gray-400 uppercase">Month</p>
+                                                    </div>
+                                                    <div className="bg-emerald-50/55 border border-emerald-100/30 rounded-lg py-1.5">
+                                                        <p className="text-sm font-extrabold text-emerald-700">{s.visitsThisWeek}</p>
+                                                        <p className="text-[8px] font-bold text-gray-400 uppercase">Week</p>
+                                                    </div>
+                                                    <div className="bg-slate-50 rounded-lg py-1.5">
+                                                        <p className={`text-sm font-extrabold ${streakColor}`}>
+                                                            {s.currentStreak > 0 ? `🔥 ${s.currentStreak}` : '—'}
+                                                        </p>
+                                                        <p className="text-[8px] font-bold text-gray-400 uppercase">Streak</p>
+                                                    </div>
+                                                </div>
+
+                                                {/* Details */}
+                                                <div className="space-y-1 text-xs border-t border-gray-50 pt-2.5">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-gray-400 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Avg visits / week</span>
+                                                        <span className="font-bold text-gray-700">{s.avgVisitsPerWeek}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-gray-400 flex items-center gap-1"><Calendar className="w-3 h-3" /> Last check-in</span>
+                                                        <span className="font-semibold text-gray-700">
+                                                            {formatDate(s.lastCheckIn)}
+                                                            {s.daysSinceLastVisit !== null && s.daysSinceLastVisit > 0 && ` (${s.daysSinceLastVisit}d ago)`}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Mini Heatmap */}
+                                            <div className="border-t border-gray-50 pt-2.5 mt-2.5 flex justify-center">
+                                                <MiniHeatmap recentDates={s.recentDates} />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* RIGHT SIDE COLUMN: Today's Logs OR Selected Member's Detail Attendance History */}
+                    <div className="lg:col-span-1 bg-white rounded-xl border border-gray-150 shadow-sm p-4 space-y-4">
+                        {selectedMemberId && selectedMemberStat ? (
+                            /* ─── SINGLE MEMBER HISTORY VIEW ─── */
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                                    <div className="flex items-center gap-2">
+                                        <ArrowLeft
+                                            onClick={() => setSelectedMemberId(null)}
+                                            className="w-4 h-4 text-gray-500 hover:text-indigo-650 cursor-pointer"
+                                        />
+                                        <h3 className="font-bold text-gray-800 text-sm">Attendance History</h3>
+                                    </div>
+                                    <button
+                                        onClick={() => setSelectedMemberId(null)}
+                                        className="p-1 hover:bg-slate-100 rounded text-gray-400 hover:text-red-500 cursor-pointer"
+                                        title="Close History"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+
+                                {/* Member Header Information */}
+                                <div className="p-3 bg-slate-50 rounded-xl border border-slate-150/60 flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-indigo-50 border border-indigo-150 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                        {selectedMemberStat.imageUrl ? (
+                                            <img src={selectedMemberStat.imageUrl} alt={selectedMemberStat.fullName} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <User className="w-4 h-4 text-indigo-400" />
+                                        )}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="font-bold text-xs text-gray-850 truncate">{selectedMemberStat.fullName}</p>
+                                        <p className="text-[10px] text-gray-500">
+                                            Status: <span className={`font-semibold capitalize ${selectedMemberStat.status === 'active' ? 'text-emerald-600' : 'text-amber-600'}`}>{selectedMemberStat.status}</span>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Summary Grid */}
+                                <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                                    <div className="bg-indigo-50 border border-indigo-100/50 rounded-lg p-2">
+                                        <p className="text-base font-extrabold text-indigo-700">{selectedMemberStat.totalVisits}</p>
+                                        <p className="text-[8px] font-bold text-gray-500 uppercase tracking-wide">Days Attended</p>
+                                    </div>
+                                    <div className="bg-orange-50 border border-orange-100/50 rounded-lg p-2">
+                                        <p className="text-base font-extrabold text-orange-700">
+                                            {selectedMemberStat.currentStreak > 0 ? `🔥 ${selectedMemberStat.currentStreak}` : '0'}
+                                        </p>
+                                        <p className="text-[8px] font-bold text-gray-500 uppercase tracking-wide">Current Streak</p>
+                                    </div>
+                                </div>
+
+                                {/* Detailed History Date List */}
+                                <div className="space-y-2">
+                                    <p className="text-[10px] font-bold text-gray-450 uppercase tracking-wider">Detailed Attendance Logs</p>
+                                    
+                                    {loadingHistory ? (
+                                        <div className="py-10 text-center space-y-2">
+                                            <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                                            <p className="text-[10px] text-gray-400">Loading history logs...</p>
+                                        </div>
+                                    ) : memberHistory.length === 0 ? (
+                                        <p className="text-xs text-gray-400 py-6 text-center">No history logs recorded.</p>
+                                    ) : (
+                                        <div className="space-y-2 overflow-y-auto max-h-[300px] pr-1 custom-scrollbar">
+                                            {memberHistory.map((h) => (
+                                                <div key={h.id} className="flex justify-between items-center p-2 bg-slate-50/50 border border-slate-100 rounded-lg">
+                                                    <span className="text-[11px] font-semibold text-slate-800 flex items-center gap-1">
+                                                        📅 {formatDate(h.date)}
+                                                    </span>
+                                                    <span className="text-[10px] font-bold text-indigo-650 bg-indigo-50 px-2 py-0.5 rounded">
+                                                        {formatTime12h(h.check_in_time)}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="pt-2 flex gap-2">
+                                    <button
+                                        onClick={() => navigate(`/members/${selectedMemberId}`)}
+                                        className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                                    >
+                                        <Eye className="w-3.5 h-3.5" />
+                                        <span>View Member Profile</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setSelectedMemberId(null)}
+                                        className="px-3 py-1.5 border border-gray-250 hover:bg-slate-50 text-gray-600 font-semibold rounded-lg text-xs transition-colors cursor-pointer"
+                                    >
+                                        Back
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            /* ─── DEFAULT: TODAY'S LIVE LOGS VIEW ─── */
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                                    <div className="flex items-center gap-2">
+                                        <Clock className="w-4 h-4 text-indigo-600" />
+                                        <h3 className="font-bold text-gray-800 text-sm">Today's Logs</h3>
+                                    </div>
+                                    <button
+                                        onClick={handleRefreshLogs}
+                                        disabled={refreshingLogs}
+                                        className="p-1 hover:bg-slate-100 rounded text-gray-450 hover:text-gray-650 cursor-pointer disabled:opacity-50"
+                                        title="Refresh Logs"
+                                    >
+                                        <RefreshCw className={`w-3.5 h-3.5 ${refreshingLogs ? 'animate-spin' : ''}`} />
+                                    </button>
+                                </div>
+
+                                {/* Live Count Pill */}
+                                <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2.5 text-center">
+                                    <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Live Check-ins Today</p>
+                                    <p className="text-2xl font-extrabold text-indigo-700 mt-0.5">{todaysLogs.length}</p>
+                                </div>
+
+                                {/* Logs Timeline */}
+                                <div className="space-y-3 overflow-y-auto max-h-[500px] pr-1 custom-scrollbar">
+                                    {todaysLogs.length === 0 ? (
+                                        <div className="text-center py-10 space-y-2">
+                                            <Fingerprint className="w-8 h-8 text-gray-300 mx-auto animate-pulse" />
+                                            <p className="text-xs text-gray-400">No check-ins yet today.</p>
+                                            <p className="text-[10px] text-gray-400">Logs appear instantly as members check in.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="relative border-l border-indigo-100 ml-2.5 space-y-4">
+                                            {todaysLogs.map((log) => {
+                                                const m = log.members;
+                                                if (!m) return null;
+                                                const isSelected = selectedMemberId === m.id;
+                                                return (
+                                                    <div key={log.id} className="relative pl-5 group">
+                                                        <div className={`absolute -left-[4.5px] top-1.5 w-2 h-2 rounded-full border border-white group-hover:scale-125 transition-all ${
+                                                            isSelected ? 'bg-indigo-700 ring-2 ring-indigo-300' : 'bg-indigo-400'
+                                                        }`} />
+
+                                                        <div
+                                                            onClick={() => setSelectedMemberId(m.id)}
+                                                            className={`p-2 rounded-lg border transition-all cursor-pointer space-y-1.5 ${
+                                                                isSelected ? 'bg-indigo-50/50 border-indigo-200' : 'bg-slate-50/60 border-slate-100 hover:bg-slate-50 hover:border-indigo-150'
+                                                            }`}
+                                                        >
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                                <div className="w-6 h-6 rounded-full bg-indigo-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                                                    {m.image_url ? (
+                                                                        <img src={m.image_url} alt={m.full_name} className="w-full h-full object-cover" />
+                                                                    ) : (
+                                                                        <User className="w-3.5 h-3.5 text-indigo-400" />
+                                                                    )}
+                                                                </div>
+                                                                <p className="font-semibold text-xs text-gray-850 truncate">{m.full_name}</p>
+                                                            </div>
+
+                                                            <div className="flex items-center justify-between text-[10px]">
+                                                                <span className="text-indigo-650 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">
+                                                                    🕒 {formatTime12h(log.check_in_time)}
+                                                                </span>
+                                                                <span className="text-gray-400 capitalize">
+                                                                    {log.method === 'fingerprint' ? '⚡ Fingerprint' : 'Manual'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -515,7 +515,7 @@ async function initDeviceConnection() {
         dbDevice = res.data;
         logger.info(`[+] Registered device found in DB: "${dbDevice.name}" (ID: ${dbDevice.id})`);
     } else {
-        const deviceName = ZK_SIMULATE ? 'Simulated Dev ZKTeco K40' : 'Iron Gym Main K40';
+        const deviceName = ZK_SIMULATE ? 'Simulated Dev ZKTeco K40' : 'Iron Gym K40';
         const createRes = await safeSupabaseCall(() => supabase
             .from('biometric_devices')
             .insert([{
@@ -873,6 +873,28 @@ async function run() {
         logger.info('[Sync] Running periodic member status check...');
         await safeSupabaseCall(() => supabase.rpc('sync_member_statuses'), 'periodic sync_member_statuses');
     }, SYNC_STATUS_INTERVAL);
+
+    // Auto-clean device memory daily (every 24 hours)
+    const DAILY_CLEAN_INTERVAL = 24 * 60 * 60 * 1000;
+    setInterval(async () => {
+        logger.info('[Maintenance] Running daily maintenance (Auto-clean K40 transaction memory)...');
+        if (!ZK_SIMULATE && zkInstance && isConnected) {
+            try {
+                const attendances = await zkInstance.getAttendances();
+                if (attendances && attendances.data && attendances.data.length > 500) {
+                    logger.info(`[Maintenance] Device has ${attendances.data.length} logs stored. Clearing device logs to free up memory...`);
+                    await zkInstance.clearAttendanceLog();
+                    logger.info('[Maintenance] Successfully cleared biometric logs from K40 device hardware memory.');
+                } else {
+                    logger.info(`[Maintenance] Device has ${attendances?.data?.length || 0} logs. No clearing needed (threshold: 500).`);
+                }
+            } catch (err) {
+                logger.error('[Maintenance Error] Failed to clear K40 logs:', err);
+            }
+        } else {
+            logger.info('[Maintenance] Simulated check for clearing device logs.');
+        }
+    }, DAILY_CLEAN_INTERVAL);
 
     if (ZK_SIMULATE) {
         // --- SIMULATION MODE ---

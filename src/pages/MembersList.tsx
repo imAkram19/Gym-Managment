@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Search, Filter } from 'lucide-react';
+import { Plus, Search, Filter, MessageSquare } from 'lucide-react';
 import { AddMemberModal } from '../components/members/AddMemberModal';
 import { getMembers } from '../lib/api/members';
 import type { Member } from '../types';
@@ -55,7 +55,7 @@ const MembersList: React.FC = () => {
                     .gte('end_date', todayStr);
 
                 const memberIds = expiringSubs?.map(s => s.member_id) || [];
-                
+
                 if (memberIds.length === 0) {
                     setMembers([]);
                 } else {
@@ -168,18 +168,60 @@ const MembersList: React.FC = () => {
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-gray-600">{member.phone}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-gray-600">
+                                            <div className="flex items-center gap-2">
+                                                <span>{member.phone || '-'}</span>
+                                                {member.phone && (
+                                                    <a
+                                                        href={(() => {
+                                                            let cleanPhone = member.phone.replace(/\D/g, '');
+                                                            if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
+
+                                                            const msg = member.status === 'expired'
+                                                                ? `🚨 Hi ${member.fullName},
+
+Your Iron Gym membership has expired.
+
+💪 Your goals are waiting for you! Renew today and get back to crushing your workouts.
+
+✨ Don't miss out on your routine, progress, and gym access.
+
+📞 Reply or visit the front desk to renew.
+
+🔥 Iron Gym Team`
+                                                                : `⚡ Hi ${member.fullName},
+
+🚨 Your Iron Gym membership will expire soon.
+
+🏋️‍♂️ Renew now to avoid any interruption in your workouts and gym access.
+
+💪 Consistency is the key to results—keep the momentum going!
+
+🔥 Iron Gym Team`;
+
+                                                            return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+                                                        })()}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-emerald-500 hover:text-emerald-600 p-0.5 hover:bg-emerald-50 rounded transition-colors flex items-center justify-center cursor-pointer"
+                                                        title="Send WhatsApp Alert"
+                                                    >
+                                                        <MessageSquare className="w-4 h-4" />
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-gray-600">{member.joinDate}</td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className={clsx(
                                                 "px-2.5 py-1 text-xs font-semibold rounded-full border shadow-sm inline-flex items-center",
-                                                member.deletedAt 
-                                                    ? "bg-purple-50 text-purple-700 border-purple-200" 
-                                                    : member.status === 'active' 
-                                                    ? "bg-green-50 text-green-700 border-green-200" 
-                                                    : member.status === 'expired' 
-                                                    ? "bg-red-50 text-red-700 border-red-200" 
-                                                    : "bg-gray-50 text-gray-700 border-gray-200"
+                                                member.deletedAt
+                                                    ? "bg-purple-50 text-purple-700 border-purple-200"
+                                                    : member.status === 'active'
+                                                        ? "bg-green-50 text-green-700 border-green-200"
+                                                        : member.status === 'expired'
+                                                            ? "bg-red-50 text-red-700 border-red-200"
+                                                            : "bg-gray-50 text-gray-700 border-gray-200"
                                             )}>
                                                 {member.deletedAt ? 'Archived' : member.status.charAt(0).toUpperCase() + member.status.slice(1)}
                                             </span>

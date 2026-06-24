@@ -25,6 +25,7 @@ export const getDashboardStats = async () => {
             end_date,
             members (
                 full_name,
+                phone,
                 deleted_at
             )
         `)
@@ -47,6 +48,7 @@ export const getDashboardStats = async () => {
             const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
             return {
                 name: sub.members?.full_name || 'Unknown Member',
+                phone: sub.members?.phone || '',
                 daysRemaining: diffDays
             };
         });
@@ -157,7 +159,7 @@ export const getCombinedRecentActivity = async () => {
             date,
             check_in_time,
             created_at,
-            members (full_name, image_url)
+            members (full_name, image_url, phone)
         `)
         .order('created_at', { ascending: false })
         .limit(10);
@@ -172,7 +174,7 @@ export const getCombinedRecentActivity = async () => {
             plan_name,
             start_date,
             created_at,
-            members (full_name, image_url)
+            members (full_name, image_url, phone)
         `)
         .order('created_at', { ascending: false })
         .limit(10);
@@ -186,7 +188,7 @@ export const getCombinedRecentActivity = async () => {
             id,
             plan_name,
             end_date,
-            members (full_name, image_url)
+            members (full_name, image_url, phone)
         `)
         .lte('end_date', todayStr)
         .order('end_date', { ascending: false })
@@ -204,6 +206,7 @@ export const getCombinedRecentActivity = async () => {
                 id: `checkin-${item.id}`,
                 member: item.members.full_name,
                 avatar: item.members.image_url,
+                phone: item.members.phone || '',
                 action: 'checked in',
                 time: `${item.date} ${item.check_in_time.slice(0, 5)}`,
                 timestamp: new Date(item.created_at || `${item.date}T${item.check_in_time}`).getTime()
@@ -219,6 +222,7 @@ export const getCombinedRecentActivity = async () => {
                 id: `renewal-${item.id}`,
                 member: item.members.full_name,
                 avatar: item.members.image_url,
+                phone: item.members.phone || '',
                 action: `renewed membership (${item.plan_name})`,
                 time: `${item.start_date}`,
                 timestamp: new Date(item.created_at || `${item.start_date}T00:00:00`).getTime()
@@ -234,6 +238,7 @@ export const getCombinedRecentActivity = async () => {
                 id: `expiry-${item.id}`,
                 member: item.members.full_name,
                 avatar: item.members.image_url,
+                phone: item.members.phone || '',
                 action: `membership expired (${item.plan_name})`,
                 time: `${item.end_date}`,
                 timestamp: new Date(`${item.end_date}T23:59:59`).getTime()
@@ -289,4 +294,95 @@ export const getRevenueData = async () => {
     // 4. Return formatted data
     return chartData.map(({ name, revenue }) => ({ name, revenue }));
 };
+
+export const getHourlyTrafficData = async () => {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const startDate = thirtyDaysAgo.toISOString().split('T')[0];
+
+    const { data: attendance, error } = await supabase
+        .from('attendance')
+        .select('check_in_time')
+        .gte('date', startDate);
+
+    if (error) {
+        console.error('Error fetching hourly traffic data:', error);
+        return [];
+    }
+
+    const hourlyCounts: { [key: number]: number } = {};
+    for (let h = 5; h <= 22; h++) {
+        hourlyCounts[h] = 0;
+    }
+
+    attendance?.forEach((item: any) => {
+        if (!item.check_in_time) return;
+        const hour = parseInt(item.check_in_time.split(':')[0], 10);
+        if (hour >= 5 && hour <= 22) {
+            hourlyCounts[hour] = (hourlyCounts[hour] || 0) + 1;
+        }
+    });
+
+    return Object.keys(hourlyCounts).map(h => {
+        const hourNum = parseInt(h, 10);
+        const ampm = hourNum >= 12 ? 'PM' : 'AM';
+        const displayHour = hourNum % 12 || 12;
+        return {
+            hour: `${displayHour} ${ampm}`,
+            count: hourlyCounts[hourNum]
+        };
+    });
+};
+
+export const getInactiveMembers = async () => {
+    const { data: inactiveCandidates, error } = await supabase
+        .from('members')
+        .select(`
+            id,
+            full_name,
+            phone,
+            join_date,
+            status,
+            deleted_at,
+            attendance (
+                date
+            )
+        `)
+        .eq('status', 'active')
+        .is('deleted_at', null);
+
+    if (error) {
+        console.error('Error fetching inactive members:', error);
+        return [];
+    }
+
+    const tenDaysAgoTime = new Date().getTime() - (10 * 24 * 60 * 60 * 1000);
+
+    const inactiveMembers = (inactiveCandidates || [])
+        .map((m: any) => {
+            const lastCheckIn = m.attendance && m.attendance.length > 0
+                ? m.attendance.reduce((latest: string, current: any) => 
+                    new Date(current.date) > new Date(latest) ? current.date : latest, '1970-01-01')
+                : null;
+            return {
+                id: m.id,
+                name: m.full_name,
+                phone: m.phone || '',
+                joinDate: m.join_date,
+                lastCheckIn: lastCheckIn === '1970-01-01' ? null : lastCheckIn
+            };
+        })
+        .filter((m: any) => {
+            if (!m.lastCheckIn) {
+                const joinDateTime = new Date(m.joinDate).getTime();
+                return joinDateTime < tenDaysAgoTime;
+            } else {
+                const lastCheckInTime = new Date(m.lastCheckIn).getTime();
+                return lastCheckInTime < tenDaysAgoTime;
+            }
+        });
+
+    return inactiveMembers;
+};
+
 

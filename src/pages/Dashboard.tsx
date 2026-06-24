@@ -1,25 +1,30 @@
 import React, { useEffect, useState } from 'react';
-import { 
-    Users, 
-    AlertCircle, 
-    Lock, 
-    Eye, 
-    EyeOff, 
-    Banknote, 
-    Coins, 
-    ArrowUpRight, 
-    ArrowDownRight, 
-    Activity, 
-    UserCheck
+import {
+    Users,
+    AlertCircle,
+    Lock,
+    Eye,
+    EyeOff,
+    Banknote,
+    Coins,
+    ArrowUpRight,
+    ArrowDownRight,
+    Activity,
+    UserCheck,
+    MessageSquare
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ActivityChart } from '../components/dashboard/ActivityChart';
-import { 
-    getDashboardStats, 
-    getRecentPayments, 
-    getCombinedRecentActivity, 
-    getRevenueData 
+import { HourlyTrafficChart } from '../components/dashboard/HourlyTrafficChart';
+import {
+    getDashboardStats,
+    getRecentPayments,
+    getCombinedRecentActivity,
+    getRevenueData,
+    getHourlyTrafficData,
+    getInactiveMembers
 } from '../lib/api/dashboard';
+
 
 interface DashboardStats {
     activeMembers: number;
@@ -61,7 +66,20 @@ const Dashboard: React.FC = () => {
     const [recentPayments, setRecentPayments] = useState<any[]>([]);
     const [recentActivities, setRecentActivities] = useState<any[]>([]);
     const [revenueData, setRevenueData] = useState<any[]>([]);
+    const [inactiveMembers, setInactiveMembers] = useState<any[]>([]);
+    const [hourlyTraffic, setHourlyTraffic] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+
+    const getWhatsAppLink = (phone: string, text: string) => {
+        let cleanPhone = phone.replace(/\D/g, '');
+        if (!cleanPhone) return '';
+        if (cleanPhone.length === 10) {
+            cleanPhone = '91' + cleanPhone;
+        }
+        return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+    };
+
+
 
     useEffect(() => {
         if (!isOwnerUnlocked) {
@@ -76,11 +94,15 @@ const Dashboard: React.FC = () => {
                 const paymentsData = await getRecentPayments(10);
                 const activityData = await getCombinedRecentActivity();
                 const chartData = await getRevenueData();
+                const inactiveData = await getInactiveMembers();
+                const trafficData = await getHourlyTrafficData();
 
                 setStats(statsData);
                 setRecentPayments(paymentsData);
                 setRecentActivities(activityData);
                 setRevenueData(chartData);
+                setInactiveMembers(inactiveData);
+                setHourlyTraffic(trafficData);
             } catch (error) {
                 console.error("Failed to load dashboard data", error);
             } finally {
@@ -110,7 +132,7 @@ const Dashboard: React.FC = () => {
                     </div>
                     <h2 className="text-xl font-bold text-slate-900">Owner Access Required</h2>
                     <p className="text-sm text-slate-500">The dashboard contains financial reports and metrics. Please enter the owner password to proceed.</p>
-                    
+
                     {ownerError && (
                         <p className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 p-2.5 rounded-lg">{ownerError}</p>
                     )}
@@ -151,12 +173,16 @@ const Dashboard: React.FC = () => {
     }
 
     return (
-        <div className="space-y-8 pb-12 max-h-[85vh] overflow-y-auto pr-2 custom-scrollbar">
+        <div className="space-y-8 pb-12">
             {/* Header */}
-            <div>
-                <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-                <p className="text-gray-500">Real-time business performance and operational summary.</p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+                    <p className="text-gray-500">Real-time business performance and operational summary.</p>
+                </div>
             </div>
+
+
 
             {/* A. Overview Section */}
             <div className="space-y-3">
@@ -177,7 +203,7 @@ const Dashboard: React.FC = () => {
                     </div>
 
                     {/* Expiring Soon */}
-                    <div 
+                    <div
                         onMouseEnter={() => setIsExpiringHovered(true)}
                         onMouseLeave={() => setIsExpiringHovered(false)}
                         onClick={() => navigate('/members?filter=expiring')}
@@ -193,13 +219,38 @@ const Dashboard: React.FC = () => {
 
                         {/* Hover Popover */}
                         {isExpiringHovered && stats.expiringSoonMembers && stats.expiringSoonMembers.length > 0 && (
-                            <div className="absolute left-0 top-full mt-2 w-64 bg-slate-900 text-white text-xs rounded-lg shadow-xl p-4 z-50 border border-slate-800 space-y-2 pointer-events-auto">
+                            <div className="absolute left-0 top-full mt-2 w-72 bg-slate-900 text-white text-xs rounded-lg shadow-xl p-4 z-50 border border-slate-800 space-y-2 pointer-events-auto">
                                 <p className="font-bold border-b border-slate-800 pb-1.5 text-amber-400">Expiring Members</p>
                                 <div className="space-y-1.5">
                                     {stats.expiringSoonMembers.slice(0, 5).map((m: any, idx: number) => (
-                                        <div key={idx} className="flex justify-between items-center">
-                                            <span className="font-medium truncate max-w-[150px]">{m.name}</span>
-                                            <span className="text-slate-400">{m.daysRemaining} {m.daysRemaining === 1 ? 'day' : 'days'}</span>
+                                        <div key={idx} className="flex justify-between items-center gap-2">
+                                            <span className="font-medium truncate max-w-[120px]">{m.name}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-slate-400">{m.daysRemaining} {m.daysRemaining === 1 ? 'day' : 'days'}</span>
+                                                {m.phone && (
+                                                    <a
+                                                        href={(() => {
+                                                            const msg = `⚡ Hi ${m.name},
+
+🚨 Your Iron Gym membership will expire soon.
+
+🏋️‍♂️ Renew now to avoid any interruption in your workouts and gym access.
+
+💪 Consistency is the key to results—keep the momentum going!
+
+🔥 Iron Gym Team`;
+                                                            return getWhatsAppLink(m.phone, msg);
+                                                        })()}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="text-emerald-400 hover:text-emerald-300 p-1 hover:bg-slate-800 rounded transition-colors flex items-center justify-center"
+                                                        title="Send WhatsApp Alert"
+                                                    >
+                                                        <MessageSquare className="w-3.5 h-3.5" />
+                                                    </a>
+                                                )}
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -291,9 +342,9 @@ const Dashboard: React.FC = () => {
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
                     <div>
                         <h3 className="text-lg font-bold text-gray-800 mb-4">Revenue Analytics</h3>
-                        
+
                         {/* Revenue Trend */}
-                        <div className="p-4 bg-slate-50 rounded-lg space-y-2 mb-6">
+                        <div className="p-4 bg-slate-50 rounded-lg space-y-2 mb-4">
                             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Revenue Trend</p>
                             <div className="flex items-center gap-2">
                                 {stats.revenueTrend >= 0 ? (
@@ -311,6 +362,29 @@ const Dashboard: React.FC = () => {
                             </div>
                         </div>
 
+                        {/* Payment Method Breakdown progress bar */}
+                        {(() => {
+                            const total = stats.cashPayments + stats.upiPayments + stats.otherPayments || 1;
+                            const upiPct = Math.round((stats.upiPayments / total) * 100);
+                            const cashPct = Math.round((stats.cashPayments / total) * 100);
+                            const otherPct = Math.max(0, 100 - upiPct - cashPct);
+                            return (
+                                <div className="space-y-3 mb-6 p-4 border border-slate-100 rounded-lg">
+                                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Collections Share</p>
+                                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden flex">
+                                        <div style={{ width: `${upiPct}%` }} className="bg-indigo-500" title={`UPI: ${upiPct}%`} />
+                                        <div style={{ width: `${cashPct}%` }} className="bg-amber-500" title={`Cash: ${cashPct}%`} />
+                                        <div style={{ width: `${otherPct}%` }} className="bg-slate-400" title={`Other: ${otherPct}%`} />
+                                    </div>
+                                    <div className="flex justify-between text-[10px] text-gray-500 font-bold">
+                                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-500 inline-block"></span> UPI ({upiPct}%)</span>
+                                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span> Cash ({cashPct}%)</span>
+                                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-400 inline-block"></span> Other ({otherPct}%)</span>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
                         {/* Collection Metrics */}
                         <div className="space-y-4">
                             <div className="flex justify-between items-center py-2 border-b border-gray-100">
@@ -322,6 +396,51 @@ const Dashboard: React.FC = () => {
                                 <span className="font-bold text-gray-900">{stats.totalTransactions} this month</span>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* C.2 Traffic and Retention Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2">
+                    <HourlyTrafficChart data={hourlyTraffic} />
+                </div>
+
+                {/* Inactive members / We Miss You */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col">
+                    <div className="mb-4">
+                        <h3 className="text-lg font-bold text-gray-800">Inactive Members</h3>
+                        <p className="text-xs text-gray-500">Active plans with no check-ins in the last 10 days.</p>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto max-h-[220px] space-y-3 pr-1 custom-scrollbar">
+                        {inactiveMembers.length === 0 ? (
+                            <div className="h-full flex items-center justify-center text-gray-400 text-xs py-8">
+                                All members are active and visiting!
+                            </div>
+                        ) : (
+                            inactiveMembers.map((m: any) => (
+                                <div key={m.id} className="flex justify-between items-center p-2.5 bg-slate-50 rounded-lg hover:bg-slate-100/70 transition-colors">
+                                    <div>
+                                        <p className="font-semibold text-slate-800 text-xs">{m.name}</p>
+                                        <p className="text-[10px] text-gray-450">
+                                            {m.lastCheckIn ? `Last seen: ${m.lastCheckIn}` : 'Never checked in'}
+                                        </p>
+                                    </div>
+                                    {m.phone && (
+                                        <a
+                                            href={getWhatsAppLink(m.phone, `Hello ${m.name}, we missed you at the gym! Hope to see you soon.`)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-md flex items-center gap-1 border border-emerald-200 transition-colors cursor-pointer"
+                                        >
+                                            <MessageSquare className="w-3 h-3" />
+                                            <span>Nudge</span>
+                                        </a>
+                                    )}
+                                </div>
+                            ))
+                        )}
                     </div>
                 </div>
             </div>
@@ -363,11 +482,10 @@ const Dashboard: React.FC = () => {
                                             ₹{Number(p.amount).toLocaleString('en-IN')}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap capitalize text-gray-600">
-                                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                                                p.method === 'cash' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${p.method === 'cash' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
                                                 p.method === 'upi' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
-                                                'bg-slate-50 text-slate-700 border border-slate-200'
-                                            }`}>
+                                                    'bg-slate-50 text-slate-700 border border-slate-200'
+                                                }`}>
                                                 {p.method}
                                             </span>
                                         </td>
@@ -409,21 +527,33 @@ const Dashboard: React.FC = () => {
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2">
                                         <span className="text-sm font-semibold text-gray-900">{item.member}</span>
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                            item.id.startsWith('checkin') ? 'bg-green-50 text-green-700 border border-green-200' :
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${item.id.startsWith('checkin') ? 'bg-green-50 text-green-700 border border-green-200' :
                                             item.id.startsWith('renewal') ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
-                                            'bg-red-50 text-red-700 border border-red-200'
-                                        }`}>
+                                                'bg-red-50 text-red-700 border border-red-200'
+                                            }`}>
                                             {item.id.startsWith('checkin') ? 'Check-In' :
-                                             item.id.startsWith('renewal') ? 'Renewal' : 'Expiry'}
+                                                item.id.startsWith('renewal') ? 'Renewal' : 'Expiry'}
                                         </span>
                                     </div>
                                     <p className="text-sm text-gray-600 mt-0.5">
                                         {item.action}
                                     </p>
                                 </div>
-                                <div className="text-right text-xs text-gray-400 font-medium">
-                                    {item.time}
+                                <div className="flex items-center gap-3">
+                                    {item.id.startsWith('checkin') && item.phone && (
+                                        <a
+                                            href={getWhatsAppLink(item.phone, `Hello ${item.member}, you checked in successfully. Have a great workout!`)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-emerald-500 hover:text-emerald-600 p-1 bg-emerald-50 hover:bg-emerald-100 rounded-md border border-emerald-250 transition-colors flex items-center justify-center cursor-pointer"
+                                            title="Send WhatsApp Confirmation"
+                                        >
+                                            <MessageSquare className="w-4 h-4" />
+                                        </a>
+                                    )}
+                                    <div className="text-right text-xs text-gray-400 font-medium whitespace-nowrap">
+                                        {item.time}
+                                    </div>
                                 </div>
                             </div>
                         ))
