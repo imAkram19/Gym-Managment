@@ -95,21 +95,49 @@ export const getEnrollmentByMemberId = async (memberId: string): Promise<Biometr
     };
 };
 
-// Enroll/link a member to a keypad ID
+// Enroll/link a member to a keypad ID (upsert)
 export const enrollMemberBiometrics = async (memberId: string, deviceUserId: number) => {
-    const { data, error } = await supabase
-        .from('biometric_enrollments')
-        .insert([{ member_id: memberId, device_user_id: deviceUserId }])
-        .select()
-        .single();
+    const existing = await getEnrollmentByMemberId(memberId);
     
-    if (error) {
-        if (error.code === '23505') {
-            throw new Error(`Device User ID ${deviceUserId} is already enrolled to another member.`);
+    if (existing) {
+        // Update existing enrollment
+        const { data, error } = await supabase
+            .from('biometric_enrollments')
+            .update({ 
+                device_user_id: deviceUserId,
+                sync_status: 'synced' // Reset to synced upon manual mapping
+            })
+            .eq('id', existing.id)
+            .select()
+            .single();
+            
+        if (error) {
+            if (error.code === '23505') {
+                throw new Error(`Device User ID ${deviceUserId} is already enrolled to another member.`);
+            }
+            throw error;
         }
-        throw error;
+        return data;
+    } else {
+        // Insert new enrollment
+        const { data, error } = await supabase
+            .from('biometric_enrollments')
+            .insert([{ 
+                member_id: memberId, 
+                device_user_id: deviceUserId,
+                sync_status: 'synced'
+            }])
+            .select()
+            .single();
+            
+        if (error) {
+            if (error.code === '23505') {
+                throw new Error(`Device User ID ${deviceUserId} is already enrolled to another member.`);
+            }
+            throw error;
+        }
+        return data;
     }
-    return data;
 };
 
 // Unenroll/unlink a member's biometrics

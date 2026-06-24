@@ -52,7 +52,7 @@ const Biometrics: React.FC = () => {
     const [members, setMembers] = useState<Member[]>([]);
     const [subscriptions, setSubscriptions] = useState<any[]>([]);
     const [selectedMemberId, setSelectedMemberId] = useState('');
-    const [enrollStep, setEnrollStep] = useState<'idle' | 'pending'>('idle');
+    const [deviceUserIdInput, setDeviceUserIdInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
 
     // Logs State
@@ -132,24 +132,42 @@ const Biometrics: React.FC = () => {
         }
     };
 
-    const handleStartEnrollment = () => {
-        if (!selectedMemberId) return;
-        setEnrollStep('pending');
-        setSuccessMsg(`Assigned ID #${assignedId}. Please create this user ID on the physical K40 device and register their fingerprint.`);
-    };
-
-    const handleConfirmEnrollment = async () => {
-        if (!selectedMemberId) return;
+    const handleMapFingerprint = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedMemberId || !deviceUserIdInput) return;
+        
         setErrorMsg('');
         setSuccessMsg('');
+        
+        // 1. Validation: Numeric check
+        const numericId = parseInt(deviceUserIdInput, 10);
+        if (isNaN(numericId) || !/^\d+$/.test(deviceUserIdInput)) {
+            setErrorMsg('Device User ID must be numeric.');
+            return;
+        }
+        
+        // 2. Validation: Duplicate mapping check for active members
+        const duplicate = enrollments.find(e => 
+            e.deviceUserId === numericId && 
+            e.memberId !== selectedMemberId &&
+            e.memberStatus === 'active'
+        );
+        if (duplicate) {
+            setErrorMsg(`Device User ID ${numericId} is already mapped to active member "${duplicate.memberName}".`);
+            return;
+        }
+        
         try {
-            await enrollMemberBiometrics(selectedMemberId, assignedId);
-            setSuccessMsg('Fingerprint enrollment confirmed and mapped successfully!');
+            setLoading(true);
+            await enrollMemberBiometrics(selectedMemberId, numericId);
+            setSuccessMsg('Fingerprint mapped successfully!');
             setSelectedMemberId('');
-            setEnrollStep('idle');
+            setDeviceUserIdInput('');
             loadData();
         } catch (err: any) {
-            setErrorMsg(err.message || 'Failed to confirm enrollment.');
+            setErrorMsg(err.message || 'Failed to map fingerprint.');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -195,8 +213,6 @@ const Biometrics: React.FC = () => {
         }
         return { days: 0, label: 'N/A' };
     };
-
-    const assignedId = enrollments.length > 0 ? Math.max(...enrollments.map(e => e.deviceUserId)) + 1 : 101;
 
 
 
@@ -503,22 +519,28 @@ const Biometrics: React.FC = () => {
             {/* TAB CONTENT: ENROLLMENTS */}
             {activeTab === 'enrollments' && (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm h-fit space-y-6">
+                    <form onSubmit={handleMapFingerprint} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm h-fit space-y-6">
                         <h2 className="text-lg font-bold text-gray-800 mb-2 flex items-center gap-2">
                             <Fingerprint className="w-5 h-5 text-indigo-600" />
-                            Enroll Fingerprint
+                            Map Fingerprint
                         </h2>
                         
                         <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1">Member</label>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1">Select Gym Member</label>
                             <select
                                 value={selectedMemberId}
                                 onChange={e => {
-                                    setSelectedMemberId(e.target.value);
-                                    setEnrollStep('idle');
+                                    const memberId = e.target.value;
+                                    setSelectedMemberId(memberId);
+                                    const existing = enrollments.find(x => x.memberId === memberId);
+                                    if (existing) {
+                                        setDeviceUserIdInput(existing.deviceUserId.toString());
+                                    } else {
+                                        setDeviceUserIdInput('');
+                                    }
                                 }}
-                                disabled={enrollStep === 'pending'}
                                 className="w-full p-2.5 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all cursor-pointer"
+                                required
                             >
                                 <option value="">-- Choose Member --</option>
                                 {members.map(m => {
@@ -541,10 +563,15 @@ const Biometrics: React.FC = () => {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1">Assigned Device ID</label>
-                            <div className="text-2xl font-bold text-gray-900 bg-gray-50 border border-gray-200 rounded-lg p-3 select-all">
-                                #{selectedMemberId ? (enrollments.find(e => e.memberId === selectedMemberId)?.deviceUserId || assignedId) : '---'}
-                            </div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1">Device User ID (Keypad ID)</label>
+                            <input
+                                type="text"
+                                value={deviceUserIdInput}
+                                onChange={e => setDeviceUserIdInput(e.target.value)}
+                                placeholder="e.g. 101"
+                                className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                                required
+                            />
                         </div>
 
                         <div>
@@ -582,15 +609,6 @@ const Biometrics: React.FC = () => {
                                             );
                                         }
                                     }
-                                    
-                                    if (enrollStep === 'pending') {
-                                        return (
-                                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                                                🟡 Pending Enrollment
-                                            </span>
-                                        );
-                                    }
-                                    
                                     return (
                                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-gray-50 text-gray-500 border border-gray-200">
                                             ⚪ Not Enrolled
@@ -603,59 +621,30 @@ const Biometrics: React.FC = () => {
                         <div className="bg-slate-50 border border-slate-100 rounded-lg p-4 space-y-2">
                             <h4 className="text-sm font-bold text-slate-800">Enrollment Process</h4>
                             <ol className="list-decimal list-inside text-sm text-slate-600 space-y-2">
-                                <li>Select Member</li>
-                                <li>Note Assigned Device ID</li>
-                                <li>Create same ID on K40</li>
-                                <li>Enroll fingerprint</li>
-                                <li>Click Confirm Enrollment</li>
+                                <li>Create member in Iron Gym</li>
+                                <li>Enroll fingerprint manually on K40 device</li>
+                                <li>Note User ID assigned on K40 keypad</li>
+                                <li>Select member above and enter K40 User ID</li>
+                                <li>Click Map Fingerprint ID</li>
                             </ol>
                         </div>
 
                         <div>
-                            {(() => {
-                                const enrollRecord = enrollments.find(e => e.memberId === selectedMemberId);
-                                if (selectedMemberId && enrollRecord && enrollRecord.syncStatus !== 'deleted' && enrollRecord.syncStatus !== 'needs_deletion') {
-                                    return (
-                                        <button
-                                            disabled
-                                            className="w-full py-3 bg-gray-100 text-gray-400 rounded-lg text-sm font-bold cursor-not-allowed border border-gray-200"
-                                        >
-                                            Already Enrolled
-                                        </button>
-                                    );
-                                }
-                                
-                                if (enrollStep === 'pending') {
-                                    return (
-                                        <button
-                                            type="button"
-                                            onClick={handleConfirmEnrollment}
-                                            className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold shadow-md transition-colors cursor-pointer flex justify-center items-center gap-2"
-                                        >
-                                            <CheckCircle className="w-4 h-4" />
-                                            Confirm Enrollment
-                                        </button>
-                                    );
-                                }
-
-                                return (
-                                    <button
-                                        type="button"
-                                        disabled={!selectedMemberId}
-                                        onClick={handleStartEnrollment}
-                                        className={clsx(
-                                            "w-full py-3 text-white rounded-lg text-sm font-bold shadow-md transition-all flex justify-center items-center gap-2",
-                                            selectedMemberId 
-                                                ? "bg-indigo-600 hover:bg-indigo-700 cursor-pointer" 
-                                                : "bg-gray-300 cursor-not-allowed shadow-none"
-                                        )}
-                                    >
-                                        Start Enrollment
-                                    </button>
-                                );
-                            })()}
+                            <button
+                                type="submit"
+                                disabled={!selectedMemberId || !deviceUserIdInput || loading}
+                                className={clsx(
+                                    "w-full py-3 text-white rounded-lg text-sm font-bold shadow-md transition-all flex justify-center items-center gap-2",
+                                    selectedMemberId && deviceUserIdInput && !loading
+                                        ? "bg-indigo-600 hover:bg-indigo-700 cursor-pointer"
+                                        : "bg-gray-300 cursor-not-allowed shadow-none"
+                                )}
+                            >
+                                <CheckCircle className="w-4 h-4" />
+                                Map Fingerprint ID
+                            </button>
                         </div>
-                    </div>
+                    </form>
 
                     <div className="lg:col-span-2 space-y-4">
                         <div className="flex flex-wrap items-center justify-between gap-4">
