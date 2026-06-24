@@ -230,15 +230,15 @@ const Dashboard: React.FC = () => {
                                                 {m.phone && (
                                                     <a
                                                         href={(() => {
-                                                            const msg = `⚡ Hi ${m.name},
+                                                            const msg = `${String.fromCodePoint(0x26A1)} Hi ${m.name},
 
-🚨 Your Iron Gym membership will expire soon.
+${String.fromCodePoint(0x1F6A8)} Your Iron Gym membership will expire soon.
 
-🏋️‍♂️ Renew now to avoid any interruption in your workouts and gym access.
+${String.fromCodePoint(0x1F3CB)} Renew now to avoid any interruption in your workouts and gym access.
 
-💪 Consistency is the key to results—keep the momentum going!
+${String.fromCodePoint(0x1F4AA)} Consistency is the key to results—keep the momentum going!
 
-🔥 Iron Gym Team`;
+${String.fromCodePoint(0x1F525)} Iron Gym Team`;
                                                             return getWhatsAppLink(m.phone, msg);
                                                         })()}
                                                         target="_blank"
@@ -423,7 +423,7 @@ const Dashboard: React.FC = () => {
                                 <div key={m.id} className="flex justify-between items-center p-2.5 bg-slate-50 rounded-lg hover:bg-slate-100/70 transition-colors">
                                     <div>
                                         <p className="font-semibold text-slate-800 text-xs">{m.name}</p>
-                                        <p className="text-[10px] text-gray-450">
+                                        <p className="text-[10px] text-gray-500">
                                             {m.lastCheckIn ? `Last seen: ${m.lastCheckIn}` : 'Never checked in'}
                                         </p>
                                     </div>
@@ -545,7 +545,7 @@ const Dashboard: React.FC = () => {
                                             href={getWhatsAppLink(item.phone, `Hello ${item.member}, you checked in successfully. Have a great workout!`)}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="text-emerald-500 hover:text-emerald-600 p-1 bg-emerald-50 hover:bg-emerald-100 rounded-md border border-emerald-250 transition-colors flex items-center justify-center cursor-pointer"
+                                            className="text-emerald-500 hover:text-emerald-600 p-1 bg-emerald-50 hover:bg-emerald-100 rounded-md border border-emerald-200 transition-colors flex items-center justify-center cursor-pointer"
                                             title="Send WhatsApp Confirmation"
                                         >
                                             <MessageSquare className="w-4 h-4" />

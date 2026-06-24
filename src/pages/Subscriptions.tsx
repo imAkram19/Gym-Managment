@@ -156,7 +156,7 @@ const Subscriptions: React.FC = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-center">
                                             <button
                                                 onClick={() => handleDelete(sub.id, sub.memberId, sub.price, sub.startDate, sub.memberName)}
-                                                className="p-1.5 text-red-500 hover:text-red-750 hover:bg-red-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center"
+                                                className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center"
                                                 title="Delete Subscription"
                                             >
                                                 <Trash2 className="w-4 h-4" />

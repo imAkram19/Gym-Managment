@@ -199,7 +199,7 @@ export const DeleteMemberModal: React.FC<DeleteMemberModalProps> = ({
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-150 rounded-lg font-medium text-sm transition-colors"
+                            className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-100 rounded-lg font-medium text-sm transition-colors"
                             disabled={loading}
                         >
                             Cancel
