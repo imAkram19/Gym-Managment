@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, User, Phone, MapPin, Calendar, Activity, Clock, Fingerprint, Link, Unlink, AlertTriangle } from 'lucide-react';
-import { getMemberById, getMemberHistory } from '../lib/api/members';
+import { getMemberById, getMemberHistory, restoreMember } from '../lib/api/members';
 import { getEnrollmentByMemberId, enrollMemberBiometrics, deleteBiometricEnrollment, checkDeviceUserIdMapping } from '../lib/api/biometrics';
 import { expireSubscription } from '../lib/api/subscriptions';
 import type { Member, Subscription, Payment, Attendance, BiometricEnrollment } from '../types';
@@ -11,6 +11,7 @@ import { supabase } from '../lib/supabase';
 import { AddSubscriptionModal } from '../components/members/AddSubscriptionModal';
 import { EditMemberModal } from '../components/members/EditMemberModal';
 import { ExtendMembershipModal } from '../components/members/ExtendMembershipModal';
+import { DeleteMemberModal } from '../components/members/DeleteMemberModal';
 
 const MemberDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -32,6 +33,9 @@ const MemberDetail: React.FC = () => {
     const [deviceUserIdInput, setDeviceUserIdInput] = useState('');
     const [biometricLoading, setBiometricLoading] = useState(false);
     const [biometricError, setBiometricError] = useState('');
+
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [isRestoring, setIsRestoring] = useState(false);
 
     const handleForceExpire = async () => {
         if (!confirm('Are you sure you want to FORCE EXPIRE this membership immediately? This will disable door access and mark the biometric enrollment for deletion.')) return;
@@ -199,6 +203,22 @@ const MemberDetail: React.FC = () => {
         }
     };
 
+    const handleRestoreMember = async () => {
+        if (!id) return;
+        if (!confirm('Are you sure you want to RESTORE this member profile and active status?')) return;
+        setIsRestoring(true);
+        try {
+            await restoreMember(id);
+            alert('Member profile restored successfully.');
+            await loadData();
+        } catch (err: any) {
+            console.error('Failed to restore member:', err);
+            alert(err.message || 'Failed to restore member');
+        } finally {
+            setIsRestoring(false);
+        }
+    };
+
     useEffect(() => {
         loadData();
     }, [id]);
@@ -227,49 +247,79 @@ const MemberDetail: React.FC = () => {
                         <span className="flex items-center gap-1"><Phone className="w-4 h-4" /> {member.phone || 'No phone'}</span>
                         <span className="flex items-center gap-1 capitalize"><User className="w-4 h-4" /> {member.gender || 'N/A'}</span>
                         <span className={clsx(
-                            "px-2 py-0.5 rounded-full font-medium text-xs uppercase self-center",
-                            member.status === 'active' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                            "px-2.5 py-0.5 rounded-full font-semibold text-xs border uppercase self-center shadow-sm",
+                            member.deletedAt 
+                                ? "bg-purple-50 text-purple-700 border-purple-200" 
+                                : member.status === 'active' 
+                                ? "bg-green-50 text-green-700 border-green-200" 
+                                : "bg-red-50 text-red-700 border-red-200"
                         )}>
-                            {member.status}
+                            {member.deletedAt ? 'Archived' : member.status}
                         </span>
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-2 md:self-center">
-                    <button 
-                        onClick={() => setIsEditModalOpen(true)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-semibold transition-colors"
-                    >
-                        Edit Profile
-                    </button>
-                    {history.subscriptions.length > 0 && (
-                        <button 
-                            onClick={() => setIsExtendModalOpen(true)}
-                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold transition-colors"
-                        >
-                            Extend Membership
-                        </button>
-                    )}
-                    {member.status === 'active' ? (
-                        <button 
-                            onClick={handleForceExpire}
-                            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold transition-colors"
-                        >
-                            Force Expire
-                        </button>
+                    {member.deletedAt ? (
+                        <>
+                            <button 
+                                onClick={handleRestoreMember}
+                                disabled={isRestoring}
+                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50"
+                            >
+                                {isRestoring ? 'Restoring...' : 'Restore Member'}
+                            </button>
+                            <button 
+                                onClick={() => setIsDeleteModalOpen(true)}
+                                className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300 font-semibold rounded-lg transition-colors"
+                            >
+                                Delete Member
+                            </button>
+                        </>
                     ) : (
-                        <button 
-                            onClick={handleActivate}
-                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors"
-                        >
-                            Activate Membership
-                        </button>
+                        <>
+                            <button 
+                                onClick={() => setIsEditModalOpen(true)}
+                                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-semibold transition-colors"
+                            >
+                                Edit Profile
+                            </button>
+                            {history.subscriptions.length > 0 && (
+                                <button 
+                                    onClick={() => setIsExtendModalOpen(true)}
+                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold transition-colors"
+                                >
+                                    Extend Membership
+                                </button>
+                            )}
+                            {member.status === 'active' ? (
+                                <button 
+                                    onClick={handleForceExpire}
+                                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold transition-colors"
+                                >
+                                    Force Expire
+                                </button>
+                            ) : (
+                                <button 
+                                    onClick={handleActivate}
+                                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors"
+                                >
+                                    Activate Membership
+                                </button>
+                            )}
+                            <button
+                                onClick={() => setIsRenewModalOpen(true)}
+                                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold transition-colors"
+                            >
+                                Renew Plan
+                            </button>
+                            <button 
+                                onClick={() => setIsDeleteModalOpen(true)}
+                                className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300 font-semibold rounded-lg transition-colors"
+                            >
+                                Delete Member
+                            </button>
+                        </>
                     )}
-                    <button
-                        onClick={() => setIsRenewModalOpen(true)}
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold transition-colors"
-                    >
-                        Renew Plan
-                    </button>
                 </div>
             </div>
 
@@ -536,6 +586,19 @@ const MemberDetail: React.FC = () => {
                     onSuccess={loadData}
                     subscriptionId={history.subscriptions[0].id}
                     currentEndDate={history.subscriptions[0].endDate}
+                />
+            )}
+
+            {isDeleteModalOpen && (
+                <DeleteMemberModal
+                    isOpen={isDeleteModalOpen}
+                    onClose={() => setIsDeleteModalOpen(false)}
+                    member={member}
+                    enrollment={enrollment}
+                    onSuccess={() => {
+                        setIsDeleteModalOpen(false);
+                        navigate('/members');
+                    }}
                 />
             )}
         </div>

@@ -58,22 +58,25 @@ export const getBiometricEnrollments = async (): Promise<BiometricEnrollmentWith
             *,
             members (
                 full_name,
-                status
+                status,
+                deleted_at
             )
         `)
         .order('device_user_id', { ascending: true });
     
     if (error) throw error;
     
-    return (data || []).map((enroll: any) => ({
-        id: enroll.id,
-        memberId: enroll.member_id,
-        deviceUserId: enroll.device_user_id,
-        enrolledAt: enroll.enrolled_at,
-        syncStatus: enroll.sync_status || 'synced',
-        memberName: enroll.members?.full_name || 'Unknown',
-        memberStatus: enroll.members?.status || 'unknown'
-    }));
+    return (data || [])
+        .filter((enroll: any) => enroll.members && !enroll.members.deleted_at)
+        .map((enroll: any) => ({
+            id: enroll.id,
+            memberId: enroll.member_id,
+            deviceUserId: enroll.device_user_id,
+            enrolledAt: enroll.enrolled_at,
+            syncStatus: enroll.sync_status || 'synced',
+            memberName: enroll.members?.full_name || 'Unknown',
+            memberStatus: enroll.members?.status || 'unknown'
+        }));
 };
 
 // Fetch enrollment for a specific member
@@ -215,4 +218,9 @@ export const checkDeviceUserIdMapping = async (deviceUserId: number): Promise<{ 
         memberName: data.members?.full_name || 'Unknown',
         memberStatus: data.members?.status || 'unknown'
     };
+};
+
+export const resetBiometricTestData = async (keepMembers: boolean = true) => {
+    const { error } = await supabase.rpc('reset_biometric_test_data', { keep_members: keepMembers });
+    if (error) throw error;
 };

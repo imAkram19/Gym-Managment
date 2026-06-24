@@ -18,7 +18,8 @@ const mapMember = (data: any): Member => ({
     info: data.info,
     joinDate: data.join_date,
     status: data.status,
-    imageUrl: data.image_url
+    imageUrl: data.image_url,
+    deletedAt: data.deleted_at
 });
 
 const MembersList: React.FC = () => {
@@ -29,10 +30,11 @@ const MembersList: React.FC = () => {
     const [members, setMembers] = useState<Member[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'expired' | 'inactive' | 'expiring'>(() => {
+    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'expired' | 'inactive' | 'expiring' | 'archived'>(() => {
         if (filterParam === 'expiring') return 'expiring';
         if (filterParam === 'expired') return 'expired';
         if (filterParam === 'active') return 'active';
+        if (filterParam === 'archived') return 'archived';
         return 'all';
     });
 
@@ -114,13 +116,14 @@ const MembersList: React.FC = () => {
                     <select
                         value={statusFilter}
                         onChange={(e) => setStatusFilter(e.target.value as any)}
-                        className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                        className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-slate-700 bg-white"
                     >
                         <option value="all">All Status</option>
                         <option value="active">Active</option>
                         <option value="expired">Expired</option>
                         <option value="inactive">Inactive</option>
                         <option value="expiring">Expiring Soon</option>
+                        <option value="archived">Archived</option>
                     </select>
                 </div>
             </div>
@@ -169,12 +172,16 @@ const MembersList: React.FC = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-gray-600">{member.joinDate}</td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className={clsx(
-                                                "px-2 py-1 text-xs font-medium rounded-full",
-                                                member.status === 'active' && "bg-green-100 text-green-700",
-                                                member.status === 'expired' && "bg-red-100 text-red-700",
-                                                member.status === 'inactive' && "bg-gray-100 text-gray-700",
+                                                "px-2.5 py-1 text-xs font-semibold rounded-full border shadow-sm inline-flex items-center",
+                                                member.deletedAt 
+                                                    ? "bg-purple-50 text-purple-700 border-purple-200" 
+                                                    : member.status === 'active' 
+                                                    ? "bg-green-50 text-green-700 border-green-200" 
+                                                    : member.status === 'expired' 
+                                                    ? "bg-red-50 text-red-700 border-red-200" 
+                                                    : "bg-gray-50 text-gray-700 border-gray-200"
                                             )}>
-                                                {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
+                                                {member.deletedAt ? 'Archived' : member.status.charAt(0).toUpperCase() + member.status.slice(1)}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">

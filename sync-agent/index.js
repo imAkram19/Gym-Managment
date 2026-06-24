@@ -222,6 +222,35 @@ async function syncBiometricEnrollments() {
     }
 }
 
+// Process any pending deletions from the physical device
+async function processPendingDeviceDeletions() {
+    try {
+        const { data: pendingDeletions, error } = await supabase
+            .from('pending_device_deletions')
+            .select('*');
+
+        if (error) throw error;
+        if (!pendingDeletions || pendingDeletions.length === 0) return;
+
+        for (const deletion of pendingDeletions) {
+            const userId = deletion.device_user_id;
+            console.log(`[Sync] Processing pending hardware deletion for Device User ID: ${userId}`);
+            
+            const deleted = await deleteUserFromDevice(userId);
+            if (deleted) {
+                // Remove from pending deletions queue in DB
+                const { error: deleteErr } = await supabase
+                    .from('pending_device_deletions')
+                    .delete()
+                    .eq('id', deletion.id);
+                if (deleteErr) console.error(`[-] Failed to remove pending deletion record for User ID ${userId}:`, deleteErr.message);
+            }
+        }
+    } catch (err) {
+        console.error('[-] Error processing pending device deletions:', err.message);
+    }
+}
+
 // 2. Self-register device and handle pings
 async function initDeviceConnection() {
     try {
@@ -486,6 +515,7 @@ async function run() {
             try {
                 await supabase.rpc('sync_member_statuses');
                 await syncBiometricEnrollments();
+                await processPendingDeviceDeletions();
             } catch (err) {
                 console.error('[-] Error in simulation sync loop:', err.message);
             }
@@ -533,6 +563,9 @@ async function run() {
 
                     // Process biometric synchronization tasks (deletions / status checks)
                     await syncBiometricEnrollments();
+
+                    // Process physical device user deletions
+                    await processPendingDeviceDeletions();
 
                     const attendances = await zkInstance.getAttendances();
                     if (attendances && attendances.data) {

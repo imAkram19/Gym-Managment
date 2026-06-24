@@ -13,7 +13,9 @@ const mapMember = (data: any): Member => ({
     info: data.info,
     joinDate: data.join_date,
     status: data.status,
-    imageUrl: data.image_url
+    imageUrl: data.image_url,
+    deletedAt: data.deleted_at,
+    pendingPermanentDeletion: data.pending_permanent_deletion
 });
 
 // Helper to map DB Subscription
@@ -47,11 +49,16 @@ const mapAttendance = (data: any): Attendance => ({
     method: data.method
 });
 
-export const getMembers = async (searchQuery: string = '', statusFilter: 'all' | 'active' | 'expired' | 'inactive' = 'all') => {
+export const getMembers = async (searchQuery: string = '', statusFilter: 'all' | 'active' | 'expired' | 'inactive' | 'archived' = 'all') => {
     let query = supabase.from('members').select('*').order('created_at', { ascending: false });
 
-    if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter);
+    if (statusFilter === 'archived') {
+        query = query.not('deleted_at', 'is', null);
+    } else {
+        query = query.is('deleted_at', null);
+        if (statusFilter !== 'all') {
+            query = query.eq('status', statusFilter);
+        }
     }
 
     if (searchQuery) {
@@ -179,4 +186,52 @@ export const updateMember = async (id: string, updates: Partial<Member>) => {
     const { error } = await supabase.from('members').update(dbUpdates).eq('id', id);
 
     if (error) throw error;
+};
+
+export const archiveMember = async (id: string, enrollmentId?: string) => {
+    // 1. Archive member (soft delete)
+    const { error: memberError } = await supabase
+        .from('members')
+        .update({
+            deleted_at: new Date().toISOString(),
+            status: 'inactive'
+        })
+        .eq('id', id);
+    
+    if (memberError) throw memberError;
+
+    // 2. Delete biometric mapping immediately if mapped
+    if (enrollmentId) {
+        const { error: bioError } = await supabase
+            .from('biometric_enrollments')
+            .delete()
+            .eq('id', enrollmentId);
+        
+        if (bioError) throw bioError;
+    }
+};
+
+export const permanentlyDeleteMemberImmediately = async (id: string) => {
+    const { error } = await supabase
+        .from('members')
+        .delete()
+        .eq('id', id);
+    
+    if (error) throw error;
+};
+
+export const restoreMember = async (id: string) => {
+    const { error: memberError } = await supabase
+        .from('members')
+        .update({
+            deleted_at: null,
+            pending_permanent_deletion: false
+        })
+        .eq('id', id);
+    
+    if (memberError) throw memberError;
+
+    // Trigger status sync to recalculate active/expired status based on subscription dates
+    const { error: syncError } = await supabase.rpc('sync_member_statuses');
+    if (syncError) console.error('Failed to sync member statuses on restore:', syncError);
 };

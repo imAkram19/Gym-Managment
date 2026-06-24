@@ -12,6 +12,8 @@ export interface Member {
     joinDate: string;
     status: MemberStatus;
     imageUrl?: string;
+    deletedAt?: string;
+    pendingPermanentDeletion?: boolean;
 }
 
 export interface Subscription {

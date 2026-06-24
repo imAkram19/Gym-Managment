@@ -30,7 +30,7 @@ export const checkInMember = async (identifier: string, method: 'manual' | 'fing
     // Check if identifier looks like UUID or Phone
     const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(identifier);
 
-    let query = supabase.from('members').select('id, full_name, status');
+    let query = supabase.from('members').select('id, full_name, status, deleted_at').is('deleted_at', null);
     if (isUuid) {
         query = query.eq('id', identifier);
     } else {

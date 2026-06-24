@@ -8,7 +8,8 @@ export const getDashboardStats = async () => {
     const { count: activeMembers, error: membersError } = await supabase
         .from('members')
         .select('*', { count: 'exact', head: true })
-        .eq('status', 'active');
+        .eq('status', 'active')
+        .is('deleted_at', null);
 
     if (membersError) console.error('Error fetching active members:', membersError);
 
@@ -23,7 +24,8 @@ export const getDashboardStats = async () => {
             id,
             end_date,
             members (
-                full_name
+                full_name,
+                deleted_at
             )
         `)
         .eq('is_active', true)
@@ -33,19 +35,21 @@ export const getDashboardStats = async () => {
 
     if (expiringError) console.error('Error fetching expiring subscriptions:', expiringError);
 
-    const expiringSoonMembers = (expiringSoonList || []).map((sub: any) => {
-        const endDate = new Date(sub.end_date);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const endD = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-        const startD = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        const diffTime = endD.getTime() - startD.getTime();
-        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-        return {
-            name: sub.members?.full_name || 'Unknown Member',
-            daysRemaining: diffDays
-        };
-    });
+    const expiringSoonMembers = (expiringSoonList || [])
+        .filter((sub: any) => sub.members && !sub.members.deleted_at)
+        .map((sub: any) => {
+            const endDate = new Date(sub.end_date);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const endD = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+            const startD = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const diffTime = endD.getTime() - startD.getTime();
+            const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+            return {
+                name: sub.members?.full_name || 'Unknown Member',
+                daysRemaining: diffDays
+            };
+        });
 
     // 3. Attendance Rate Today
     const { count: todaysAttendanceCount, error: attError } = await supabase
