@@ -4,7 +4,7 @@ export interface Member {
     id: string;
     fullName: string;
     email?: string;
-    phone: string;
+    phone?: string;
     gender?: 'male' | 'female' | 'other';
     dateOfBirth?: string;
     address?: string;

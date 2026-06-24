@@ -113,7 +113,7 @@ export const createMemberWithSubscription = async (
         .from('members')
         .insert([{
             full_name: memberData.fullName,
-            phone: memberData.phone,
+            phone: memberData.phone?.trim() || null,
             gender: memberData.gender,
             date_of_birth: memberData.dateOfBirth,
             address: memberData.address,
@@ -168,7 +168,7 @@ export const createMemberWithSubscription = async (
 export const updateMember = async (id: string, updates: Partial<Member>) => {
     const dbUpdates: any = {};
     if (updates.fullName) dbUpdates.full_name = updates.fullName;
-    if (updates.phone) dbUpdates.phone = updates.phone;
+    if (updates.phone !== undefined) dbUpdates.phone = updates.phone?.trim() || null;
     if (updates.gender) dbUpdates.gender = updates.gender;
     if (updates.dateOfBirth) dbUpdates.date_of_birth = updates.dateOfBirth;
     if (updates.address) dbUpdates.address = updates.address;

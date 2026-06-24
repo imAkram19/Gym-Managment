@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, User, Receipt } from 'lucide-react';
+import { X, Save, User, Receipt, Fingerprint } from 'lucide-react';
 import { createMemberWithSubscription } from '../../lib/api/members';
+import { enrollMemberBiometrics, checkDeviceUserIdMapping } from '../../lib/api/biometrics';
 import { supabase } from '../../lib/supabase';
 
 interface AddMemberModalProps {
@@ -17,6 +18,11 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [touched, setTouched] = useState<Record<string, boolean>>({});
     const [isCheckingPhone, setIsCheckingPhone] = useState(false);
+
+    // Biometric Mapping states
+    const [deviceUserId, setDeviceUserId] = useState('');
+    const [isCheckingDeviceUserId, setIsCheckingDeviceUserId] = useState(false);
+    const [deviceUserIdError, setDeviceUserIdError] = useState('');
 
     // Plan Name Select State
     const [planNameSelect, setPlanNameSelect] = useState('Monthly');
@@ -59,12 +65,12 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
         }
 
         // Phone
-        if (!data.phone.trim()) {
-            newErrors.phone = 'Phone Number is required';
-        } else if (!/^\d+$/.test(data.phone)) {
-            newErrors.phone = 'Phone Number must contain only numbers';
-        } else if (data.phone.length !== 10) {
-            newErrors.phone = 'Phone Number must be exactly 10 digits';
+        if (data.phone.trim()) {
+            if (!/^\d+$/.test(data.phone)) {
+                newErrors.phone = 'Phone Number must contain only numbers';
+            } else if (data.phone.length !== 10) {
+                newErrors.phone = 'Phone Number must be exactly 10 digits';
+            }
         }
 
         // Gender
@@ -169,6 +175,42 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
         checkDuplicatePhone();
     }, [formData.phone]);
 
+    // Check for duplicate device user ID
+    useEffect(() => {
+        const checkDuplicateDeviceUserId = async () => {
+            const trimmed = deviceUserId.trim();
+            if (!trimmed) {
+                setDeviceUserIdError('');
+                return;
+            }
+
+            if (!/^\d+$/.test(trimmed)) {
+                setDeviceUserIdError('Device User ID must contain only numbers');
+                return;
+            }
+
+            setIsCheckingDeviceUserId(true);
+            setDeviceUserIdError('');
+            try {
+                const numericId = parseInt(trimmed, 10);
+                const mapping = await checkDeviceUserIdMapping(numericId);
+                if (mapping && mapping.mapped) {
+                    setDeviceUserIdError(`Device User ID ${numericId} is already mapped to ${mapping.memberName}.`);
+                }
+            } catch (err) {
+                console.error('Error checking duplicate Device User ID:', err);
+            } finally {
+                setIsCheckingDeviceUserId(false);
+            }
+        };
+
+        const timer = setTimeout(() => {
+            checkDuplicateDeviceUserId();
+        }, 300);
+
+        return () => clearTimeout(timer);
+    }, [deviceUserId]);
+
     // Update validations on form change
     useEffect(() => {
         const syncErrors = validate(formData);
@@ -250,9 +292,9 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
         
         // Final validation check
         const finalErrors = validate(formData);
-        if (Object.keys(finalErrors).length > 0) {
+        if (Object.keys(finalErrors).length > 0 || deviceUserIdError) {
             setErrors(finalErrors);
-            setError('Please fix validation errors before submitting.');
+            setError(deviceUserIdError || 'Please fix validation errors before submitting.');
             return;
         }
 
@@ -260,10 +302,10 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
         setError('');
 
         try {
-            await createMemberWithSubscription(
+            const newMember = await createMemberWithSubscription(
                 {
                     fullName: formData.fullName,
-                    phone: formData.phone,
+                    phone: formData.phone.trim() || undefined,
                     gender: formData.gender as 'male' | 'female' | 'other',
                     dateOfBirth: formData.dateOfBirth || undefined,
                     address: formData.address || undefined,
@@ -282,6 +324,14 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
                     adminNote: formData.adminNote
                 }
             );
+
+            // Optional biometric mapping
+            const trimmedDeviceUserId = deviceUserId.trim();
+            if (trimmedDeviceUserId) {
+                const numericId = parseInt(trimmedDeviceUserId, 10);
+                await enrollMemberBiometrics(newMember.id, numericId);
+            }
+
             onSuccess();
             onClose();
         } catch (err: any) {
@@ -295,10 +345,13 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
     const hasValidationError = (field: string) => touched[field] && errors[field];
 
     // Check if form is valid to enable submit button
+    const isPhoneValid = formData.phone.trim() === '' || (/^\d{10}$/.test(formData.phone) && !errors.phone);
+    const isDeviceUserIdValid = deviceUserId.trim() === '' || (/^\d+$/.test(deviceUserId) && !deviceUserIdError);
     const isFormValid = 
         formData.fullName.trim().length >= 3 &&
         formData.fullName.trim().length <= 100 &&
-        /^\d{10}$/.test(formData.phone) &&
+        isPhoneValid &&
+        isDeviceUserIdValid &&
         (planNameSelect !== 'Custom' || formData.planName.trim() !== '') &&
         Number(formData.price) > 0 &&
         Number(formData.durationMonths) > 0 &&
@@ -306,8 +359,9 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
         formData.endDate !== '' &&
         new Date(formData.endDate) > new Date(formData.startDate) &&
         (formData.initialPayment === '' || (Number(formData.initialPayment) >= 0 && Number(formData.initialPayment) <= Number(formData.price))) &&
-        Object.keys(errors).length === 0 &&
-        !isCheckingPhone;
+        (!errors.fullName && !errors.planName && !errors.price && !errors.durationMonths && !errors.startDate && !errors.endDate && !errors.initialPayment) &&
+        !isCheckingPhone &&
+        !isCheckingDeviceUserId;
 
     return (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -354,10 +408,9 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
                                 )}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number (Optional)</label>
                                 <div className="relative">
                                     <input
-                                        required
                                         name="phone"
                                         value={formData.phone}
                                         onChange={handleChange}
@@ -425,6 +478,41 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose,
                                     placeholder="Street, City, State"
                                     className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900"
                                 />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Biometric Mapping (Optional) */}
+                    <div className="space-y-4 border-t border-gray-100 pt-6">
+                        <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                            <Fingerprint className="w-5 h-5 text-indigo-500" />
+                            Biometric Mapping (Optional)
+                        </h3>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Device User ID (Keypad ID)</label>
+                                <div className="relative">
+                                    <input
+                                        name="deviceUserId"
+                                        value={deviceUserId}
+                                        onChange={e => setDeviceUserId(e.target.value)}
+                                        type="text"
+                                        placeholder="e.g. 101"
+                                        className={`w-full p-2.5 border rounded-lg focus:ring-2 outline-none text-gray-900 transition-all ${
+                                            deviceUserIdError 
+                                                ? 'border-red-300 focus:ring-red-200' 
+                                                : 'border-gray-300 focus:ring-indigo-500'
+                                        }`}
+                                    />
+                                    {isCheckingDeviceUserId && (
+                                        <span className="absolute right-3 top-3 text-xs text-gray-400">Verifying ID...</span>
+                                    )}
+                                </div>
+                                {deviceUserIdError && (
+                                    <p className="text-xs text-red-600 mt-1 font-medium">{deviceUserIdError}</p>
+                                )}
+                                <p className="text-xs text-gray-400 mt-1">If this member already has a fingerprint registered on the K40 device, enter their keypad ID here to map them automatically.</p>
                             </div>
                         </div>
                     </div>

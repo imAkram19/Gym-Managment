@@ -71,12 +71,12 @@ export const EditMemberModal: React.FC<EditMemberModalProps> = ({
         }
 
         // Phone
-        if (!data.phone.trim()) {
-            newErrors.phone = 'Phone Number is required';
-        } else if (!/^\d+$/.test(data.phone)) {
-            newErrors.phone = 'Phone Number must contain only numbers';
-        } else if (data.phone.length !== 10) {
-            newErrors.phone = 'Phone Number must be exactly 10 digits';
+        if (data.phone.trim()) {
+            if (!/^\d+$/.test(data.phone)) {
+                newErrors.phone = 'Phone Number must contain only numbers';
+            } else if (data.phone.length !== 10) {
+                newErrors.phone = 'Phone Number must be exactly 10 digits';
+            }
         }
 
         // Gender
@@ -255,7 +255,7 @@ export const EditMemberModal: React.FC<EditMemberModalProps> = ({
                 .from('members')
                 .update({
                     full_name: formData.fullName,
-                    phone: formData.phone,
+                    phone: formData.phone.trim() || null,
                     gender: formData.gender,
                     date_of_birth: formData.dateOfBirth || null,
                     address: formData.address || null,
@@ -300,16 +300,17 @@ export const EditMemberModal: React.FC<EditMemberModalProps> = ({
 
     const hasValidationError = (field: string) => touched[field] && errors[field];
 
+    const isPhoneValid = formData.phone.trim() === '' || (/^\d{10}$/.test(formData.phone) && !errors.phone);
     const isFormValid = 
         formData.fullName.trim().length >= 3 &&
         formData.fullName.trim().length <= 100 &&
-        /^\d{10}$/.test(formData.phone) &&
+        isPhoneValid &&
         (planNameSelect !== 'Custom' || formData.planName.trim() !== '') &&
         Number(formData.price) > 0 &&
         formData.startDate !== '' &&
         formData.endDate !== '' &&
         new Date(formData.endDate) > new Date(formData.startDate) &&
-        Object.keys(errors).length === 0 &&
+        (!errors.fullName && !errors.planName && !errors.price && !errors.startDate && !errors.endDate) &&
         !isCheckingPhone;
 
     return (
@@ -356,10 +357,9 @@ export const EditMemberModal: React.FC<EditMemberModalProps> = ({
                                 )}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number (Optional)</label>
                                 <div className="relative">
                                     <input
-                                        required
                                         name="phone"
                                         value={formData.phone}
                                         onChange={handleChange}

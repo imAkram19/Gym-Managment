@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, User, Phone, MapPin, Calendar, Activity, Clock, Fingerprint, Link, Unlink, AlertTriangle } from 'lucide-react';
 import { getMemberById, getMemberHistory } from '../lib/api/members';
-import { getEnrollmentByMemberId, enrollMemberBiometrics, deleteBiometricEnrollment } from '../lib/api/biometrics';
+import { getEnrollmentByMemberId, enrollMemberBiometrics, deleteBiometricEnrollment, checkDeviceUserIdMapping } from '../lib/api/biometrics';
 import { expireSubscription } from '../lib/api/subscriptions';
 import type { Member, Subscription, Payment, Attendance, BiometricEnrollment } from '../types';
 import { clsx } from 'clsx';
@@ -159,12 +159,22 @@ const MemberDetail: React.FC = () => {
         setBiometricError('');
         try {
             const parsedId = parseInt(deviceUserIdInput, 10);
-            if (isNaN(parsedId)) throw new Error('Device User ID must be a valid number.');
+            if (isNaN(parsedId) || !/^\d+$/.test(deviceUserIdInput)) {
+                throw new Error('Device User ID must be a valid number.');
+            }
+
+            // Duplicate mapping check
+            const mappingResult = await checkDeviceUserIdMapping(parsedId);
+            if (mappingResult && mappingResult.mapped) {
+                throw new Error(`Device User ID ${parsedId} is already mapped to ${mappingResult.memberName}.`);
+            }
+
             const newEnroll = await enrollMemberBiometrics(id, parsedId);
             setEnrollment({
                 id: newEnroll.id,
                 memberId: id,
-                deviceUserId: parsedId
+                deviceUserId: parsedId,
+                syncStatus: newEnroll.sync_status || 'synced'
             });
             setDeviceUserIdInput('');
         } catch (err: any) {
@@ -214,7 +224,7 @@ const MemberDetail: React.FC = () => {
                 <div className="flex-1 text-center md:text-left">
                     <h1 className="text-2xl font-bold text-gray-900">{member.fullName}</h1>
                     <div className="flex flex-wrap justify-center md:justify-start gap-4 mt-2 text-gray-500 text-sm">
-                        <span className="flex items-center gap-1"><Phone className="w-4 h-4" /> {member.phone}</span>
+                        <span className="flex items-center gap-1"><Phone className="w-4 h-4" /> {member.phone || 'No phone'}</span>
                         <span className="flex items-center gap-1 capitalize"><User className="w-4 h-4" /> {member.gender || 'N/A'}</span>
                         <span className={clsx(
                             "px-2 py-0.5 rounded-full font-medium text-xs uppercase self-center",
@@ -301,60 +311,92 @@ const MemberDetail: React.FC = () => {
                                 {enrollment ? (
                                     <div className="space-y-4">
                                         <div className={clsx(
-                                            "border p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-colors",
+                                            "border p-5 rounded-xl flex flex-col gap-4 transition-colors",
                                             enrollment.syncStatus === 'synced' && "bg-green-50 border-green-200",
                                             enrollment.syncStatus === 'needs_deletion' && "bg-amber-50 border-amber-200 animate-pulse",
                                             enrollment.syncStatus === 'deleted' && "bg-red-50 border-red-200",
                                             enrollment.syncStatus === 'needs_enrollment' && "bg-indigo-50 border-indigo-200"
                                         )}>
-                                            <div>
-                                                <div className="flex items-center gap-2">
-                                                    <p className={clsx(
-                                                        "text-sm font-bold",
-                                                        enrollment.syncStatus === 'synced' && "text-green-900",
-                                                        enrollment.syncStatus === 'needs_deletion' && "text-amber-900",
-                                                        enrollment.syncStatus === 'deleted' && "text-red-900",
-                                                        enrollment.syncStatus === 'needs_enrollment' && "text-indigo-900"
-                                                    )}>
-                                                        {enrollment.syncStatus === 'synced' && 'Fingerprint Active'}
-                                                        {enrollment.syncStatus === 'needs_deletion' && 'Blocking Process Initiated'}
-                                                        {enrollment.syncStatus === 'deleted' && 'Fingerprint Blocked'}
-                                                        {enrollment.syncStatus === 'needs_enrollment' && 'Re-Enrollment Required'}
-                                                    </p>
-                                                    <span className={clsx(
-                                                        "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border",
-                                                        enrollment.syncStatus === 'synced' && "bg-green-100 text-green-800 border-green-300",
-                                                        enrollment.syncStatus === 'needs_deletion' && "bg-amber-100 text-amber-800 border-amber-300",
-                                                        enrollment.syncStatus === 'deleted' && "bg-red-100 text-red-800 border-red-300",
-                                                        enrollment.syncStatus === 'needs_enrollment' && "bg-indigo-100 text-indigo-800 border-indigo-300 animate-pulse"
-                                                    )}>
-                                                        {enrollment.syncStatus === 'synced' && 'Synced'}
-                                                        {enrollment.syncStatus === 'needs_deletion' && 'Syncing'}
-                                                        {enrollment.syncStatus === 'deleted' && 'Blocked'}
-                                                        {enrollment.syncStatus === 'needs_enrollment' && 'Pending Scan'}
-                                                    </span>
+                                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 w-full">
+                                                <div className="space-y-3 flex-grow">
+                                                    <div>
+                                                        <p className={clsx(
+                                                            "text-base font-bold",
+                                                            enrollment.syncStatus === 'synced' && "text-green-900",
+                                                            enrollment.syncStatus === 'needs_deletion' && "text-amber-900",
+                                                            enrollment.syncStatus === 'deleted' && "text-red-900",
+                                                            enrollment.syncStatus === 'needs_enrollment' && "text-indigo-900"
+                                                        )}>
+                                                            {enrollment.syncStatus === 'synced' && 'Fingerprint Active'}
+                                                            {enrollment.syncStatus === 'needs_deletion' && 'Membership Expired'}
+                                                            {enrollment.syncStatus === 'deleted' && 'Membership already expired'}
+                                                            {enrollment.syncStatus === 'needs_enrollment' && 'Re-Enrollment Required'}
+                                                        </p>
+                                                        <p className={clsx(
+                                                            "text-xs mt-1 font-medium",
+                                                            enrollment.syncStatus === 'synced' && "text-green-700",
+                                                            enrollment.syncStatus === 'needs_deletion' && "text-amber-700",
+                                                            enrollment.syncStatus === 'deleted' && "text-red-700",
+                                                            enrollment.syncStatus === 'needs_enrollment' && "text-indigo-700"
+                                                        )}>
+                                                            {enrollment.syncStatus === 'synced' && `Member is mapped to Keypad ID ${enrollment.deviceUserId} and has active access to gym doors.`}
+                                                            {enrollment.syncStatus === 'needs_deletion' && 'Member is not eligible for gym access. Biometric deletion has been scheduled.'}
+                                                            {enrollment.syncStatus === 'deleted' && 'Access has been blocked automatically.'}
+                                                            {enrollment.syncStatus === 'needs_enrollment' && `Subscription renewed! Please physically register fingerprint ID ${enrollment.deviceUserId} on the K40 device keypad.`}
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Status Badges Row */}
+                                                    <div className="flex flex-wrap gap-4 pt-3 text-xs border-t border-dashed border-gray-200">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="font-semibold text-gray-500">Device User ID:</span>
+                                                            <span className="px-2 py-0.5 bg-white border border-gray-200 text-gray-800 rounded font-bold shadow-sm">
+                                                                {enrollment.deviceUserId}
+                                                            </span>
+                                                        </div>
+
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="font-semibold text-gray-500">Sync Status:</span>
+                                                            <span className={clsx(
+                                                                "px-2 py-0.5 rounded text-[10px] font-bold uppercase border shadow-sm",
+                                                                enrollment.syncStatus === 'synced' && "bg-green-100 text-green-800 border-green-300",
+                                                                enrollment.syncStatus === 'needs_deletion' && "bg-amber-100 text-amber-800 border-amber-300",
+                                                                enrollment.syncStatus === 'deleted' && "bg-red-100 text-red-800 border-red-300",
+                                                                enrollment.syncStatus === 'needs_enrollment' && "bg-indigo-100 text-indigo-800 border-indigo-300 animate-pulse"
+                                                            )}>
+                                                                {enrollment.syncStatus === 'synced' && 'Synced'}
+                                                                {enrollment.syncStatus === 'needs_deletion' && 'Syncing'}
+                                                                {enrollment.syncStatus === 'deleted' && 'Blocked'}
+                                                                {enrollment.syncStatus === 'needs_enrollment' && 'Pending Scan'}
+                                                            </span>
+                                                        </div>
+
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="font-semibold text-gray-500">Enrollment Status:</span>
+                                                            <span className={clsx(
+                                                                "px-2 py-0.5 rounded text-[10px] font-bold uppercase border shadow-sm",
+                                                                enrollment.syncStatus === 'synced' && "bg-green-100 text-green-800 border-green-300",
+                                                                enrollment.syncStatus === 'needs_deletion' && "bg-amber-100 text-amber-800 border-amber-300",
+                                                                enrollment.syncStatus === 'deleted' && "bg-red-100 text-red-800 border-red-300",
+                                                                enrollment.syncStatus === 'needs_enrollment' && "bg-indigo-100 text-indigo-800 border-indigo-300 animate-pulse"
+                                                            )}>
+                                                                {enrollment.syncStatus === 'synced' && 'Active'}
+                                                                {enrollment.syncStatus === 'needs_deletion' && 'Pending Deletion'}
+                                                                {enrollment.syncStatus === 'deleted' && 'Deleted'}
+                                                                {enrollment.syncStatus === 'needs_enrollment' && 'Needs Re-Enroll'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                <p className={clsx(
-                                                    "text-xs mt-1",
-                                                    enrollment.syncStatus === 'synced' && "text-green-700",
-                                                    enrollment.syncStatus === 'needs_deletion' && "text-amber-700",
-                                                    enrollment.syncStatus === 'deleted' && "text-red-700",
-                                                    enrollment.syncStatus === 'needs_enrollment' && "text-indigo-700"
-                                                )}>
-                                                    {enrollment.syncStatus === 'synced' && `Member is mapped to Keypad ID ${enrollment.deviceUserId} and has active access to gym doors.`}
-                                                    {enrollment.syncStatus === 'needs_deletion' && `Subscription has expired. Deletion command has been sent to the K40 device for ID ${enrollment.deviceUserId}.`}
-                                                    {enrollment.syncStatus === 'deleted' && `Access Denied: Fingerprint for ID ${enrollment.deviceUserId} was deleted from the device memory. Member must renew and re-register.`}
-                                                    {enrollment.syncStatus === 'needs_enrollment' && `Subscription renewed! Please physically register fingerprint ID ${enrollment.deviceUserId} on the K40 device keypad.`}
-                                                </p>
+                                                <button
+                                                    onClick={handleUnlinkBiometrics}
+                                                    disabled={biometricLoading}
+                                                    className="px-4 py-2 bg-white hover:bg-red-50 text-red-600 border border-red-200 hover:border-red-300 font-semibold text-sm rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 shrink-0 self-start sm:self-center shadow-sm"
+                                                >
+                                                    <Unlink className="w-4 h-4" />
+                                                    Unlink Mapping
+                                                </button>
                                             </div>
-                                            <button
-                                                onClick={handleUnlinkBiometrics}
-                                                disabled={biometricLoading}
-                                                className="px-4 py-2 bg-white hover:bg-red-50 text-red-600 border border-red-200 hover:border-red-300 font-semibold text-sm rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 self-end sm:self-center"
-                                            >
-                                                <Unlink className="w-4 h-4" />
-                                                Unlink Mapping
-                                            </button>
                                         </div>
                                         {enrollment.syncStatus === 'needs_enrollment' && (
                                             <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl text-xs text-indigo-800 flex items-start gap-2">

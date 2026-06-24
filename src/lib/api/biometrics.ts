@@ -192,3 +192,27 @@ export const syncMemberStatuses = async () => {
     const { error } = await supabase.rpc('sync_member_statuses');
     if (error) throw error;
 };
+
+// Check if a Device User ID is already mapped to any member
+export const checkDeviceUserIdMapping = async (deviceUserId: number): Promise<{ mapped: boolean; memberName?: string; memberStatus?: string } | null> => {
+    const { data, error } = await supabase
+        .from('biometric_enrollments')
+        .select(`
+            *,
+            members (
+                full_name,
+                status
+            )
+        `)
+        .eq('device_user_id', deviceUserId)
+        .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return null;
+
+    return {
+        mapped: true,
+        memberName: data.members?.full_name || 'Unknown',
+        memberStatus: data.members?.status || 'unknown'
+    };
+};
