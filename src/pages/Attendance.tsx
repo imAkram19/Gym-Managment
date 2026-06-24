@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { getMemberAttendanceMetrics, getMemberAttendanceHistory } from '../lib/api/attendance';
 import type { MemberAttendanceStat } from '../lib/api/attendance';
-import { getHourlyTrafficData, getCombinedRecentActivity } from '../lib/api/dashboard';
+import { getHourlyTrafficData, getCombinedRecentActivity, getRawTrafficData } from '../lib/api/dashboard';
 import { HourlyTrafficChart } from '../components/dashboard/HourlyTrafficChart';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -95,7 +95,9 @@ const Attendance: React.FC = () => {
     const [loadingHistory, setLoadingHistory] = useState(false);
 
     // Hourly traffic & Recent activity states
-    const [hourlyTraffic, setHourlyTraffic] = useState<any[]>([]);
+    const [rawTraffic, setRawTraffic] = useState<any[]>([]);
+    const [timeRange, setTimeRange] = useState<number>(30);
+    const [dayOfWeekFilter, setDayOfWeekFilter] = useState<string>('all');
     const [recentActivities, setRecentActivities] = useState<any[]>([]);
     const [trafficLoaded, setTrafficLoaded] = useState(false);
     const [activityLoaded, setActivityLoaded] = useState(false);
@@ -134,15 +136,19 @@ const Attendance: React.FC = () => {
             });
     }, [selectedMemberId]);
 
+    const [lastLoadedRange, setLastLoadedRange] = useState<number | null>(null);
+
     // Load traffic / activity data dynamically based on active tab
     useEffect(() => {
-        if (activeTab === 'traffic' && !trafficLoaded) {
+        if (activeTab === 'traffic' && (rawTraffic.length === 0 || lastLoadedRange !== timeRange)) {
             setLoadingExtra(true);
-            getHourlyTrafficData()
+            getRawTrafficData(timeRange)
                 .then(data => {
-                    setHourlyTraffic(data);
+                    setRawTraffic(data);
+                    setLastLoadedRange(timeRange);
                     setTrafficLoaded(true);
                 })
+                .catch(err => console.error("Error loading traffic data:", err))
                 .finally(() => setLoadingExtra(false));
         } else if (activeTab === 'activity' && !activityLoaded) {
             setLoadingExtra(true);
@@ -151,16 +157,18 @@ const Attendance: React.FC = () => {
                     setRecentActivities(data);
                     setActivityLoaded(true);
                 })
+                .catch(err => console.error("Error loading activity data:", err))
                 .finally(() => setLoadingExtra(false));
         }
-    }, [activeTab, trafficLoaded, activityLoaded]);
+    }, [activeTab, timeRange, lastLoadedRange, rawTraffic.length, activityLoaded]);
 
     const handleRefreshExtra = async () => {
         setLoadingExtra(true);
         try {
             if (activeTab === 'traffic') {
-                const data = await getHourlyTrafficData();
-                setHourlyTraffic(data);
+                const data = await getRawTrafficData(timeRange);
+                setRawTraffic(data);
+                setLastLoadedRange(timeRange);
             } else if (activeTab === 'activity') {
                 const data = await getCombinedRecentActivity();
                 setRecentActivities(data);
@@ -171,6 +179,61 @@ const Attendance: React.FC = () => {
             setLoadingExtra(false);
         }
     };
+
+    // Filter and aggregate traffic client-side
+    const { filteredHourlyTraffic, totalCount, filteredCount } = useMemo(() => {
+        const filtered = rawTraffic.filter((item: any) => {
+            // Day of week filter
+            if (dayOfWeekFilter !== 'all') {
+                const checkInDate = new Date(item.date);
+                const dayIndex = checkInDate.getDay(); // 0 is Sunday, 1 is Monday, etc.
+                
+                if (dayOfWeekFilter === 'weekdays') {
+                    if (dayIndex === 0 || dayIndex === 6) return false; // Sunday or Saturday
+                } else if (dayOfWeekFilter === 'weekends') {
+                    if (dayIndex !== 0 && dayIndex !== 6) return false; // Not Sunday and not Saturday
+                } else {
+                    // Specific day
+                    const daysMap: { [key: string]: number } = {
+                        sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
+                        thursday: 4, friday: 5, saturday: 6
+                    };
+                    if (dayIndex !== daysMap[dayOfWeekFilter]) return false;
+                }
+            }
+
+            return true;
+        });
+
+        const hourlyCounts: { [key: number]: number } = {};
+        for (let h = 5; h <= 22; h++) {
+            hourlyCounts[h] = 0;
+        }
+
+        filtered.forEach((item: any) => {
+            if (!item.check_in_time) return;
+            const hour = parseInt(item.check_in_time.split(':')[0], 10);
+            if (hour >= 5 && hour <= 22) {
+                hourlyCounts[hour] = (hourlyCounts[hour] || 0) + 1;
+            }
+        });
+
+        const aggregated = Object.keys(hourlyCounts).map(h => {
+            const hourNum = parseInt(h, 10);
+            const ampm = hourNum >= 12 ? 'PM' : 'AM';
+            const displayHour = hourNum % 12 || 12;
+            return {
+                hour: `${displayHour} ${ampm}`,
+                count: hourlyCounts[hourNum]
+            };
+        });
+
+        return {
+            filteredHourlyTraffic: aggregated,
+            totalCount: rawTraffic.length,
+            filteredCount: filtered.length
+        };
+    }, [rawTraffic, dayOfWeekFilter]);
 
     // Find details of the selected member from the loaded stats
     const selectedMemberStat = useMemo(() => {
@@ -435,7 +498,7 @@ const Attendance: React.FC = () => {
                     <div className="flex items-center justify-between pb-3 border-b border-gray-100">
                         <div className="flex items-center gap-2">
                             <Activity className="w-5 h-5 text-indigo-600 animate-pulse" />
-                            <h3 className="font-bold text-gray-800">Hourly Gym Traffic (Last 30 Days)</h3>
+                            <h3 className="font-bold text-gray-800">Hourly Gym Traffic (Last {timeRange} Days)</h3>
                         </div>
                         <button
                             onClick={handleRefreshExtra}
@@ -447,14 +510,66 @@ const Attendance: React.FC = () => {
                         </button>
                     </div>
 
-                    {loadingExtra && hourlyTraffic.length === 0 ? (
+                    {/* Filters Row */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-50/50 rounded-xl border border-slate-200/60">
+                        {/* Time Range Select */}
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Date Range</label>
+                            <select
+                                value={timeRange}
+                                onChange={(e) => setTimeRange(Number(e.target.value))}
+                                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow shadow-sm"
+                            >
+                                <option value={7}>Last 7 Days</option>
+                                <option value={30}>Last 30 Days</option>
+                                <option value={90}>Last 90 Days</option>
+                                <option value={180}>Last 180 Days</option>
+                                <option value={365}>Last 365 Days</option>
+                            </select>
+                        </div>
+
+                        {/* Day of Week Select */}
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Day of the Week</label>
+                            <select
+                                value={dayOfWeekFilter}
+                                onChange={(e) => setDayOfWeekFilter(e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow shadow-sm"
+                            >
+                                <option value="all">All Days</option>
+                                <option value="weekdays">Weekdays (Mon - Fri)</option>
+                                <option value="weekends">Weekends (Sat - Sun)</option>
+                                <option value="monday">Monday</option>
+                                <option value="tuesday">Tuesday</option>
+                                <option value="wednesday">Wednesday</option>
+                                <option value="thursday">Thursday</option>
+                                <option value="friday">Friday</option>
+                                <option value="saturday">Saturday</option>
+                                <option value="sunday">Sunday</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Stats Badge */}
+                    <div className="flex items-center justify-between text-xs text-slate-500 px-1">
+                        <span>
+                            Showing <strong className="text-slate-800 font-semibold">{filteredCount}</strong> check-ins
+                            {dayOfWeekFilter !== 'all' ? (
+                                <> (filtered from <strong className="text-slate-800 font-semibold">{totalCount}</strong> total in last {timeRange} days)</>
+                            ) : (
+                                <> in the last {timeRange} days</>
+                            )}
+                        </span>
+                    </div>
+
+                    {loadingExtra && rawTraffic.length === 0 ? (
                         <div className="py-20 text-center space-y-2">
                             <div className="w-8 h-8 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
                             <p className="text-xs text-gray-400">Loading traffic patterns...</p>
                         </div>
                     ) : (
                         <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-100">
-                            <HourlyTrafficChart data={hourlyTraffic} />
+                            <HourlyTrafficChart data={filteredHourlyTraffic} />
                         </div>
                     )}
                 </div>

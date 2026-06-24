@@ -334,6 +334,25 @@ export const getHourlyTrafficData = async () => {
     });
 };
 
+export const getRawTrafficData = async (days: number = 30) => {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    const startDateStr = startDate.toISOString().split('T')[0];
+
+    const { data: attendance, error } = await supabase
+        .from('attendance')
+        .select('check_in_time, date')
+        .gte('date', startDateStr);
+
+    if (error) {
+        console.error('Error fetching raw traffic data:', error);
+        return [];
+    }
+
+    return attendance || [];
+};
+
+
 export const getInactiveMembers = async () => {
     const { data: inactiveCandidates, error } = await supabase
         .from('members')
