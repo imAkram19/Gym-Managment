@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-    Flame, TrendingUp, Calendar, Clock, Search, Award, UserX, BarChart2,
+    Flame, TrendingUp, Calendar, Clock, Search, BarChart2,
     AlertTriangle, User, Trophy, MessageSquare, Fingerprint, RefreshCw,
     ArrowLeft, Eye, X
 } from 'lucide-react';
@@ -353,7 +353,7 @@ const Attendance: React.FC = () => {
                             <h3 className="font-bold text-gray-800">Longest Inactive</h3>
                         </div>
                         <div className="space-y-3">
-                            {leaderboardData.mostInactive.map((member, idx) => (
+                            {leaderboardData.mostInactive.map((member) => (
                                 <div
                                     key={member.memberId}
                                     onClick={() => navigate(`/members/${member.memberId}`)}
