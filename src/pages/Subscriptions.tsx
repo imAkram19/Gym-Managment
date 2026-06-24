@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Filter, RefreshCw, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
-import { getSubscriptions, type SubscriptionWithMember } from '../lib/api/subscriptions';
+import { Search, Filter, RefreshCw, AlertCircle, CheckCircle, XCircle, Trash2 } from 'lucide-react';
+import { getSubscriptions, deleteSubscription, type SubscriptionWithMember } from '../lib/api/subscriptions';
 import { clsx } from 'clsx';
 import { Link } from 'react-router-dom';
 
@@ -19,6 +19,19 @@ const Subscriptions: React.FC = () => {
             console.error("Failed to fetch subscriptions", error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDelete = async (id: string, memberId: string, price: number, startDate: string, memberName: string) => {
+        const confirmMsg = `Are you sure you want to delete this subscription for ${memberName}?\n\nThis will also delete the corresponding payment of ₹${price} to keep the monthly revenue metrics accurate.`;
+        if (window.confirm(confirmMsg)) {
+            try {
+                await deleteSubscription(id, memberId, price, startDate);
+                fetchSubscriptions();
+            } catch (error) {
+                console.error("Failed to delete subscription", error);
+                alert("Error: Failed to delete subscription.");
+            }
         }
     };
 
@@ -42,7 +55,7 @@ const Subscriptions: React.FC = () => {
                 </div>
                 <button
                     onClick={fetchSubscriptions}
-                    className="p-2 text-gray-600 hover:text-indigo-600 bg-white border border-gray-200 rounded-lg hover:border-indigo-200"
+                    className="p-2 text-gray-600 hover:text-indigo-600 bg-white border border-gray-200 rounded-lg hover:border-indigo-200 cursor-pointer"
                     title="Refresh List"
                 >
                     <RefreshCw className="w-5 h-5" />
@@ -66,7 +79,7 @@ const Subscriptions: React.FC = () => {
                     <select
                         value={statusFilter}
                         onChange={(e) => setStatusFilter(e.target.value as any)}
-                        className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                        className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-gray-800"
                     >
                         <option value="all">All Status</option>
                         <option value="active">Active</option>
@@ -87,23 +100,24 @@ const Subscriptions: React.FC = () => {
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Dates</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Amount</th>
+                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">Loading subscriptions...</td>
+                                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">Loading subscriptions...</td>
                                 </tr>
                             ) : filteredSubscriptions.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">No subscriptions found.</td>
+                                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">No subscriptions found.</td>
                                 </tr>
                             ) : (
                                 filteredSubscriptions.map((sub) => (
                                     <tr key={sub.id} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <Link to={`/members/${sub.memberId}`} className="flex items-center gap-3 group">
-                                                <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold overflow-hidden">
+                                                <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold overflow-hidden flex-shrink-0">
                                                     {sub.memberImage ? (
                                                         <img src={sub.memberImage} alt={sub.memberName} className="w-full h-full object-cover" />
                                                     ) : (
@@ -138,6 +152,15 @@ const Subscriptions: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-gray-900 font-bold">
                                             ₹{sub.price}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                                            <button
+                                                onClick={() => handleDelete(sub.id, sub.memberId, sub.price, sub.startDate, sub.memberName)}
+                                                className="p-1.5 text-red-500 hover:text-red-750 hover:bg-red-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center"
+                                                title="Delete Subscription"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
                                         </td>
                                     </tr>
                                 ))

@@ -77,3 +77,30 @@ export const expireSubscription = async (id: string) => {
     const { error: syncError } = await supabase.rpc('sync_member_statuses');
     if (syncError) console.error('Failed to sync member statuses:', syncError);
 };
+
+export const deleteSubscription = async (subId: string, memberId: string, price: number, startDate: string) => {
+    // 1. Delete subscription
+    const { error: subErr } = await supabase
+        .from('subscriptions')
+        .delete()
+        .eq('id', subId);
+
+    if (subErr) throw subErr;
+
+    // 2. Try to find and delete the matching payment to keep revenue calculations accurate
+    const { error: payErr } = await supabase
+        .from('payments')
+        .delete()
+        .eq('member_id', memberId)
+        .eq('amount', price)
+        .eq('date', startDate);
+
+    if (payErr) {
+        console.error("Failed to delete matching payment:", payErr);
+    }
+
+    // 3. Immediately sync member statuses
+    const { error: syncError } = await supabase.rpc('sync_member_statuses');
+    if (syncError) console.error('Failed to sync member statuses:', syncError);
+};
+
