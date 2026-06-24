@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { getMemberAttendanceMetrics, getMemberAttendanceHistory } from '../lib/api/attendance';
 import type { MemberAttendanceStat } from '../lib/api/attendance';
-import { getHourlyTrafficData, getCombinedRecentActivity, getRawTrafficData } from '../lib/api/dashboard';
+import { getCombinedRecentActivity, getRawTrafficData } from '../lib/api/dashboard';
 import { HourlyTrafficChart } from '../components/dashboard/HourlyTrafficChart';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ const getWhatsAppLink = (phone: string, text: string) => {
     if (cleanPhone.length === 10) {
         cleanPhone = '91' + cleanPhone;
     }
-    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+    return `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`;
 };
 
 function formatTime12h(timeStr: string | null): string {
@@ -99,7 +99,6 @@ const Attendance: React.FC = () => {
     const [timeRange, setTimeRange] = useState<number>(30);
     const [dayOfWeekFilter, setDayOfWeekFilter] = useState<string>('all');
     const [recentActivities, setRecentActivities] = useState<any[]>([]);
-    const [trafficLoaded, setTrafficLoaded] = useState(false);
     const [activityLoaded, setActivityLoaded] = useState(false);
     const [loadingExtra, setLoadingExtra] = useState(false);
 
@@ -146,7 +145,6 @@ const Attendance: React.FC = () => {
                 .then(data => {
                     setRawTraffic(data);
                     setLastLoadedRange(timeRange);
-                    setTrafficLoaded(true);
                 })
                 .catch(err => console.error("Error loading traffic data:", err))
                 .finally(() => setLoadingExtra(false));

@@ -76,7 +76,7 @@ const Dashboard: React.FC = () => {
         if (cleanPhone.length === 10) {
             cleanPhone = '91' + cleanPhone;
         }
-        return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+        return `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`;
     };
 
 
@@ -230,15 +230,15 @@ const Dashboard: React.FC = () => {
                                                 {m.phone && (
                                                     <a
                                                         href={(() => {
-                                                            const msg = `${String.fromCodePoint(0x26A1)} Hi ${m.name},
+                                                            const msg = `⚡ *Hi ${m.name},*
 
-${String.fromCodePoint(0x1F6A8)} Your Iron Gym membership will expire soon.
+🚨 *Your Iron Gym membership will expire soon.*
 
-${String.fromCodePoint(0x1F3CB)} Renew now to avoid any interruption in your workouts and gym access.
+🏋️‍♂️ *Renew now to avoid any interruption in your workouts and gym access.*
 
-${String.fromCodePoint(0x1F4AA)} Consistency is the key to results—keep the momentum going!
+💪 *Consistency is the key to results—keep the momentum going!*
 
-${String.fromCodePoint(0x1F525)} Iron Gym Team`;
+🔥 *Iron Gym Team*`;
                                                             return getWhatsAppLink(m.phone, msg);
                                                         })()}
                                                         target="_blank"

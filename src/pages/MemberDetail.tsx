@@ -254,28 +254,28 @@ const MemberDetail: React.FC = () => {
                                         if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
 
                                         const msg = member.status === 'expired'
-                                            ? `${String.fromCodePoint(0x1F6A8)} Hi ${member.fullName},
+                                            ? `🚨 *Hi ${member.fullName},*
 
-Your Iron Gym membership has expired.
+*Your Iron Gym membership has expired.*
 
-${String.fromCodePoint(0x1F4AA)} Your goals are waiting for you! Renew today and get back to crushing your workouts.
+💪 *Your goals are waiting for you! Renew today and get back to crushing your workouts.*
 
-${String.fromCodePoint(0x2728)} Don't miss out on your routine, progress, and gym access.
+✨ *Don't miss out on your routine, progress, and gym access.*
 
-${String.fromCodePoint(0x1F4DE)} Reply or visit the front desk to renew.
+📞 *Reply or visit the front desk to renew.*
 
-${String.fromCodePoint(0x1F525)} Iron Gym Team`
-                                            : `${String.fromCodePoint(0x26A1)} Hi ${member.fullName},
+🔥 *Iron Gym Team*`
+                                            : `⚡ *Hi ${member.fullName},*
 
-${String.fromCodePoint(0x1F6A8)} Your Iron Gym membership will expire soon.
+🚨 *Your Iron Gym membership will expire soon.*
 
-${String.fromCodePoint(0x1F3CB)} Renew now to avoid any interruption in your workouts and gym access.
+🏋️‍♂️ *Renew now to avoid any interruption in your workouts and gym access.*
 
-${String.fromCodePoint(0x1F4AA)} Consistency is the key to results—keep the momentum going!
+💪 *Consistency is the key to results—keep the momentum going!*
 
-${String.fromCodePoint(0x1F525)} Iron Gym Team`;
+🔥 *Iron Gym Team*`;
 
-                                        return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+                                        return `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`;
                                     })()}
                                     target="_blank"
                                     rel="noopener noreferrer"
