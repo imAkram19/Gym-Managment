@@ -2,11 +2,13 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Flame, TrendingUp, Calendar, Clock, Search, BarChart2,
-    AlertTriangle, User, Trophy, MessageSquare, Fingerprint, RefreshCw,
-    ArrowLeft, Eye, X
+    AlertTriangle, User, Trophy, MessageSquare, RefreshCw,
+    ArrowLeft, Eye, X, Activity, UserCheck
 } from 'lucide-react';
-import { getMemberAttendanceMetrics, getTodaysAttendance, getMemberAttendanceHistory } from '../lib/api/attendance';
+import { getMemberAttendanceMetrics, getMemberAttendanceHistory } from '../lib/api/attendance';
 import type { MemberAttendanceStat } from '../lib/api/attendance';
+import { getHourlyTrafficData, getCombinedRecentActivity } from '../lib/api/dashboard';
+import { HourlyTrafficChart } from '../components/dashboard/HourlyTrafficChart';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -83,41 +85,30 @@ function MiniHeatmap({ recentDates }: { recentDates: string[] }) {
 const Attendance: React.FC = () => {
     const navigate = useNavigate();
     const [stats, setStats] = useState<MemberAttendanceStat[]>([]);
-    const [todaysLogs, setTodaysLogs] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [refreshingLogs, setRefreshingLogs] = useState(false);
     const [search, setSearch] = useState('');
-    const [activeTab, setActiveTab] = useState<'all' | 'leaderboard' | 'inactive'>('all');
+    const [activeTab, setActiveTab] = useState<'all' | 'leaderboard' | 'traffic' | 'activity'>('all');
 
     // Single member selection states for detailed history view in right panel
     const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
     const [memberHistory, setMemberHistory] = useState<any[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
 
+    // Hourly traffic & Recent activity states
+    const [hourlyTraffic, setHourlyTraffic] = useState<any[]>([]);
+    const [recentActivities, setRecentActivities] = useState<any[]>([]);
+    const [trafficLoaded, setTrafficLoaded] = useState(false);
+    const [activityLoaded, setActivityLoaded] = useState(false);
+    const [loadingExtra, setLoadingExtra] = useState(false);
+
     const loadData = async () => {
         try {
-            const [statData, todayData] = await Promise.all([
-                getMemberAttendanceMetrics(),
-                getTodaysAttendance()
-            ]);
+            const statData = await getMemberAttendanceMetrics();
             setStats(statData);
-            setTodaysLogs(todayData);
         } catch (error) {
             console.error("Failed to load attendance page data", error);
         } finally {
             setLoading(false);
-        }
-    };
-
-    const handleRefreshLogs = async () => {
-        setRefreshingLogs(true);
-        try {
-            const todayData = await getTodaysAttendance();
-            setTodaysLogs(todayData);
-        } catch (error) {
-            console.error("Failed to refresh logs", error);
-        } finally {
-            setRefreshingLogs(false);
         }
     };
 
@@ -143,6 +134,44 @@ const Attendance: React.FC = () => {
             });
     }, [selectedMemberId]);
 
+    // Load traffic / activity data dynamically based on active tab
+    useEffect(() => {
+        if (activeTab === 'traffic' && !trafficLoaded) {
+            setLoadingExtra(true);
+            getHourlyTrafficData()
+                .then(data => {
+                    setHourlyTraffic(data);
+                    setTrafficLoaded(true);
+                })
+                .finally(() => setLoadingExtra(false));
+        } else if (activeTab === 'activity' && !activityLoaded) {
+            setLoadingExtra(true);
+            getCombinedRecentActivity()
+                .then(data => {
+                    setRecentActivities(data);
+                    setActivityLoaded(true);
+                })
+                .finally(() => setLoadingExtra(false));
+        }
+    }, [activeTab, trafficLoaded, activityLoaded]);
+
+    const handleRefreshExtra = async () => {
+        setLoadingExtra(true);
+        try {
+            if (activeTab === 'traffic') {
+                const data = await getHourlyTrafficData();
+                setHourlyTraffic(data);
+            } else if (activeTab === 'activity') {
+                const data = await getCombinedRecentActivity();
+                setRecentActivities(data);
+            }
+        } catch (error) {
+            console.error("Failed to refresh logs", error);
+        } finally {
+            setLoadingExtra(false);
+        }
+    };
+
     // Find details of the selected member from the loaded stats
     const selectedMemberStat = useMemo(() => {
         return stats.find(s => s.memberId === selectedMemberId) || null;
@@ -159,7 +188,7 @@ const Attendance: React.FC = () => {
         return { total, checkedInToday, inactive, onStreak, avgPerWeek: avgPerWeek.toFixed(1) };
     }, [stats]);
 
-    // ── Filtered + Sorted list ─────────────────────────────────────────────────
+    // ── Filtered list ──────────────────────────────────────────────────────────
     const displayed = useMemo(() => {
         let list = [...stats];
 
@@ -168,15 +197,11 @@ const Attendance: React.FC = () => {
             list = list.filter(s => s.fullName.toLowerCase().includes(q));
         }
 
-        if (activeTab === 'inactive') {
-            list = list.filter(s => (s.daysSinceLastVisit ?? 999) > 10);
-        }
-
         // Default sorting: total visits descending
         list.sort((a, b) => b.totalVisits - a.totalVisits);
 
         return list;
-    }, [stats, search, activeTab]);
+    }, [stats, search]);
 
     // Leaderboards
     const leaderboardData = useMemo(() => {
@@ -210,7 +235,7 @@ const Attendance: React.FC = () => {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Attendance Metrics</h1>
-                    <p className="text-gray-500 text-sm mt-0.5">Track individual visit frequencies, streaks, and identify inactive members.</p>
+                    <p className="text-gray-500 text-sm mt-0.5">Track individual visit frequencies, streaks, hourly traffic patterns, and live activity streams.</p>
                 </div>
             </div>
 
@@ -233,7 +258,7 @@ const Attendance: React.FC = () => {
                         </p>
                         <p className="text-3xl font-extrabold text-orange-500">{summary.onStreak}</p>
                     </div>
-                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex flex-col gap-1 hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveTab('inactive')}>
+                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex flex-col gap-1 hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveTab('leaderboard')}>
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
                             <AlertTriangle className="w-3.5 h-3.5 text-red-500" /> Inactive (10d+)
                         </p>
@@ -259,16 +284,26 @@ const Attendance: React.FC = () => {
                     </span>
                 </button>
                 <button
-                    onClick={() => { setActiveTab('inactive'); setSelectedMemberId(null); }}
-                    className={`pb-3 font-semibold text-sm border-b-2 transition-colors cursor-pointer ${activeTab === 'inactive' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                    onClick={() => { setActiveTab('traffic'); setSelectedMemberId(null); }}
+                    className={`pb-3 font-semibold text-sm border-b-2 transition-colors cursor-pointer ${activeTab === 'traffic' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
                 >
                     <span className="flex items-center gap-1.5">
-                        <AlertTriangle className="w-4 h-4" /> Inactive / Needs Nudge
+                        <Activity className="w-4 h-4" /> Hourly Gym Traffic
+                    </span>
+                </button>
+                <button
+                    onClick={() => { setActiveTab('activity'); setSelectedMemberId(null); }}
+                    className={`pb-3 font-semibold text-sm border-b-2 transition-colors cursor-pointer ${activeTab === 'activity' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                >
+                    <span className="flex items-center gap-1.5">
+                        <UserCheck className="w-4 h-4" /> Recent Activity Logs
                     </span>
                 </button>
             </div>
 
-            {activeTab === 'leaderboard' ? (
+            {/* ─── TAB CONTENT RENDERING ─── */}
+
+            {activeTab === 'leaderboard' && (
                 /* ─── LEADERBOARD VIEW ─── */
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Top Monthly Attendees */}
@@ -346,7 +381,7 @@ const Attendance: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Most Inactive (Needs Nudge) */}
+                    {/* Most Inactive */}
                     <div className="bg-white rounded-xl border border-gray-150 shadow-sm p-6 space-y-4">
                         <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
                             <AlertTriangle className="w-5 h-5 text-red-500" />
@@ -392,18 +427,129 @@ const Attendance: React.FC = () => {
                         </div>
                     </div>
                 </div>
-            ) : (
-                /* ─── ALL MEMBER / INACTIVE VIEW WITH LIVE TODAY'S LOGS & HISTORY PANELS ─── */
+            )}
+
+            {activeTab === 'traffic' && (
+                /* ─── HOURLY GYM TRAFFIC VIEW ─── */
+                <div className="bg-white rounded-xl border border-gray-150 shadow-sm p-6 space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                        <div className="flex items-center gap-2">
+                            <Activity className="w-5 h-5 text-indigo-600 animate-pulse" />
+                            <h3 className="font-bold text-gray-800">Hourly Gym Traffic (Last 30 Days)</h3>
+                        </div>
+                        <button
+                            onClick={handleRefreshExtra}
+                            disabled={loadingExtra}
+                            className="p-1.5 hover:bg-slate-100 rounded text-gray-450 hover:text-indigo-650 cursor-pointer disabled:opacity-50 flex items-center gap-1 text-xs font-semibold"
+                        >
+                            <RefreshCw className={`w-3.5 h-3.5 ${loadingExtra ? 'animate-spin' : ''}`} />
+                            <span>Refresh</span>
+                        </button>
+                    </div>
+
+                    {loadingExtra && hourlyTraffic.length === 0 ? (
+                        <div className="py-20 text-center space-y-2">
+                            <div className="w-8 h-8 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                            <p className="text-xs text-gray-400">Loading traffic patterns...</p>
+                        </div>
+                    ) : (
+                        <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-100">
+                            <HourlyTrafficChart data={hourlyTraffic} />
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'activity' && (
+                /* ─── RECENT ACTIVITY LOGS VIEW ─── */
+                <div className="bg-white rounded-xl border border-gray-150 shadow-sm p-6 space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                        <div className="flex items-center gap-2">
+                            <UserCheck className="w-5 h-5 text-indigo-600" />
+                            <h3 className="font-bold text-gray-800">Recent Activity Logs</h3>
+                        </div>
+                        <button
+                            onClick={handleRefreshExtra}
+                            disabled={loadingExtra}
+                            className="p-1.5 hover:bg-slate-100 rounded text-gray-450 hover:text-indigo-650 cursor-pointer disabled:opacity-50 flex items-center gap-1 text-xs font-semibold"
+                        >
+                            <RefreshCw className={`w-3.5 h-3.5 ${loadingExtra ? 'animate-spin' : ''}`} />
+                            <span>Refresh Logs</span>
+                        </button>
+                    </div>
+
+                    {loadingExtra && recentActivities.length === 0 ? (
+                        <div className="py-20 text-center space-y-2">
+                            <div className="w-8 h-8 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                            <p className="text-xs text-gray-400">Loading recent activities...</p>
+                        </div>
+                    ) : recentActivities.length === 0 ? (
+                        <div className="py-16 text-center text-gray-400 text-sm">
+                            No recent check-ins or activity events recorded.
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {recentActivities.map((item) => (
+                                <div key={item.id} className="flex items-center gap-4 py-3 border-b border-gray-50 last:border-0 hover:bg-slate-50/50 rounded-lg px-2 transition-colors">
+                                    <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border border-gray-100 flex-shrink-0">
+                                        {item.avatar ? (
+                                            <img src={item.avatar} alt={item.member} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="w-full h-full bg-indigo-50 text-indigo-650 flex items-center justify-center font-bold text-xs uppercase">
+                                                {item.member.charAt(0)}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center flex-wrap gap-2">
+                                            <span className="text-sm font-semibold text-gray-900 truncate">{item.member}</span>
+                                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${item.id.startsWith('checkin') ? 'bg-green-50 text-green-700 border border-green-250' :
+                                                item.id.startsWith('renewal') ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
+                                                    'bg-red-50 text-red-700 border border-red-200'
+                                                }`}>
+                                                {item.id.startsWith('checkin') ? 'Check-In' :
+                                                    item.id.startsWith('renewal') ? 'Renewal' : 'Expiry'}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-0.5">
+                                            {item.action}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-3 flex-shrink-0">
+                                        {item.id.startsWith('checkin') && item.phone && (
+                                            <a
+                                                href={getWhatsAppLink(item.phone, `Hello ${item.member}, you checked in successfully. Have a great workout!`)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-emerald-600 hover:text-emerald-700 p-1.5 bg-emerald-50 hover:bg-emerald-100 rounded-md border border-emerald-200 transition-colors flex items-center justify-center cursor-pointer"
+                                                title="Send WhatsApp Confirmation"
+                                            >
+                                                <MessageSquare className="w-3.5 h-3.5" />
+                                            </a>
+                                        )}
+                                        <div className="text-right text-[10px] text-gray-400 font-medium whitespace-nowrap">
+                                            {item.time}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'all' && (
+                /* ─── ALL MEMBER VIEW ─── */
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-                    {/* LEFT / MAIN COLUMN: Stats & Member Cards Grid (75%) */}
-                    <div className="lg:col-span-3 space-y-4">
+                    {/* LEFT / MAIN COLUMN: Stats & Member Cards Grid */}
+                    <div className={selectedMemberId ? 'lg:col-span-3 space-y-4' : 'lg:col-span-4 space-y-4'}>
                         {/* Search and simple metadata bar */}
-                        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+                        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center justify-between gap-3">
                             <div className="relative flex-1">
                                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
                                 <input
                                     type="text"
-                                    placeholder={activeTab === 'inactive' ? "Search inactive member…" : "Search member stats…"}
+                                    placeholder="Search member stats…"
                                     value={search}
                                     onChange={e => setSearch(e.target.value)}
                                     className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-850 outline-none focus:ring-2 focus:ring-indigo-400"
@@ -421,7 +567,11 @@ const Attendance: React.FC = () => {
                                 <p className="text-gray-400 font-medium">No members found.</p>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                            <div className={`grid gap-4 ${
+                                selectedMemberId 
+                                  ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' 
+                                  : 'grid-cols-1 md:grid-cols-3 xl:grid-cols-4'
+                            }`}>
                                 {displayed.map((s) => {
                                     const health = getAttendanceHealthColor(s.avgVisitsPerWeek);
                                     const streakColor = getStreakColor(s.currentStreak);
@@ -432,7 +582,7 @@ const Attendance: React.FC = () => {
                                         <div
                                             key={s.memberId}
                                             onClick={() => setSelectedMemberId(s.memberId)}
-                                            className={`bg-white rounded-xl border p-5 hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer space-y-4 relative flex flex-col justify-between ${
+                                            className={`bg-white rounded-xl border p-5 hover:shadow-md hover:border-indigo-350 transition-all cursor-pointer space-y-4 relative flex flex-col justify-between ${
                                                 isSelected ? 'ring-2 ring-indigo-500 border-transparent shadow-sm' : 'border-gray-100 shadow-sm'
                                             }`}
                                         >
@@ -447,7 +597,7 @@ const Attendance: React.FC = () => {
                                                                 <User className="w-4.5 h-4.5 text-indigo-400" />
                                                             )}
                                                         </div>
-                                                        <div className="min-w-0">
+                                                        <div className="min-w-0 flex-1">
                                                             <p className="font-bold text-xs text-gray-900 truncate">{s.fullName}</p>
                                                             <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${health.bg} ${health.text}`}>
                                                                 {health.label}
@@ -466,7 +616,7 @@ const Attendance: React.FC = () => {
                                                                 e.stopPropagation();
                                                                 navigate(`/members/${s.memberId}`);
                                                             }}
-                                                            className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-650"
+                                                            className="p-1 hover:bg-slate-100 rounded text-slate-405 hover:text-indigo-650"
                                                             title="View Profile"
                                                         >
                                                             <Eye className="w-3.5 h-3.5" />
@@ -523,181 +673,101 @@ const Attendance: React.FC = () => {
                         )}
                     </div>
 
-                    {/* RIGHT SIDE COLUMN: Today's Logs OR Selected Member's Detail Attendance History */}
-                    <div className="lg:col-span-1 bg-white rounded-xl border border-gray-150 shadow-sm p-4 space-y-4">
-                        {selectedMemberId && selectedMemberStat ? (
-                            /* ─── SINGLE MEMBER HISTORY VIEW ─── */
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-                                    <div className="flex items-center gap-2">
-                                        <ArrowLeft
-                                            onClick={() => setSelectedMemberId(null)}
-                                            className="w-4 h-4 text-gray-500 hover:text-indigo-650 cursor-pointer"
-                                        />
-                                        <h3 className="font-bold text-gray-800 text-sm">Attendance History</h3>
-                                    </div>
-                                    <button
+                    {/* RIGHT SIDE COLUMN: Only displayed once a member is selected */}
+                    {selectedMemberId && selectedMemberStat && (
+                        <div className="lg:col-span-1 bg-white rounded-xl border border-gray-150 shadow-sm p-4 space-y-4">
+                            <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                                <div className="flex items-center gap-2">
+                                    <ArrowLeft
                                         onClick={() => setSelectedMemberId(null)}
-                                        className="p-1 hover:bg-slate-100 rounded text-gray-400 hover:text-red-500 cursor-pointer"
-                                        title="Close History"
-                                    >
-                                        <X className="w-3.5 h-3.5" />
-                                    </button>
+                                        className="w-4 h-4 text-gray-500 hover:text-indigo-655 cursor-pointer"
+                                    />
+                                    <h3 className="font-bold text-gray-800 text-sm">Attendance History</h3>
                                 </div>
+                                <button
+                                    onClick={() => setSelectedMemberId(null)}
+                                    className="p-1 hover:bg-slate-100 rounded text-gray-400 hover:text-red-500 cursor-pointer"
+                                    title="Close History"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
 
-                                {/* Member Header Information */}
-                                <div className="p-3 bg-slate-50 rounded-xl border border-slate-150/60 flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-indigo-50 border border-indigo-150 flex items-center justify-center overflow-hidden flex-shrink-0">
-                                        {selectedMemberStat.imageUrl ? (
-                                            <img src={selectedMemberStat.imageUrl} alt={selectedMemberStat.fullName} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <User className="w-4 h-4 text-indigo-400" />
-                                        )}
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="font-bold text-xs text-gray-850 truncate">{selectedMemberStat.fullName}</p>
-                                        <p className="text-[10px] text-gray-500">
-                                            Status: <span className={`font-semibold capitalize ${selectedMemberStat.status === 'active' ? 'text-emerald-600' : 'text-amber-600'}`}>{selectedMemberStat.status}</span>
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* Summary Grid */}
-                                <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                                    <div className="bg-indigo-50 border border-indigo-100/50 rounded-lg p-2">
-                                        <p className="text-base font-extrabold text-indigo-700">{selectedMemberStat.totalVisits}</p>
-                                        <p className="text-[8px] font-bold text-gray-500 uppercase tracking-wide">Days Attended</p>
-                                    </div>
-                                    <div className="bg-orange-50 border border-orange-100/50 rounded-lg p-2">
-                                        <p className="text-base font-extrabold text-orange-700">
-                                            {selectedMemberStat.currentStreak > 0 ? `🔥 ${selectedMemberStat.currentStreak}` : '0'}
-                                        </p>
-                                        <p className="text-[8px] font-bold text-gray-500 uppercase tracking-wide">Current Streak</p>
-                                    </div>
-                                </div>
-
-                                {/* Detailed History Date List */}
-                                <div className="space-y-2">
-                                    <p className="text-[10px] font-bold text-gray-450 uppercase tracking-wider">Detailed Attendance Logs</p>
-                                    
-                                    {loadingHistory ? (
-                                        <div className="py-10 text-center space-y-2">
-                                            <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
-                                            <p className="text-[10px] text-gray-400">Loading history logs...</p>
-                                        </div>
-                                    ) : memberHistory.length === 0 ? (
-                                        <p className="text-xs text-gray-400 py-6 text-center">No history logs recorded.</p>
+                            {/* Member Header Info */}
+                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-150/60 flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-indigo-50 border border-indigo-150 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                    {selectedMemberStat.imageUrl ? (
+                                        <img src={selectedMemberStat.imageUrl} alt={selectedMemberStat.fullName} className="w-full h-full object-cover" />
                                     ) : (
-                                        <div className="space-y-2 overflow-y-auto max-h-[300px] pr-1 custom-scrollbar">
-                                            {memberHistory.map((h) => (
-                                                <div key={h.id} className="flex justify-between items-center p-2 bg-slate-50/50 border border-slate-100 rounded-lg">
-                                                    <span className="text-[11px] font-semibold text-slate-800 flex items-center gap-1">
-                                                        📅 {formatDate(h.date)}
-                                                    </span>
-                                                    <span className="text-[10px] font-bold text-indigo-650 bg-indigo-50 px-2 py-0.5 rounded">
-                                                        {formatTime12h(h.check_in_time)}
-                                                    </span>
-                                                </div>
-                                            ))}
-                                        </div>
+                                        <User className="w-4 h-4 text-indigo-400" />
                                     )}
                                 </div>
-
-                                <div className="pt-2 flex gap-2">
-                                    <button
-                                        onClick={() => navigate(`/members/${selectedMemberId}`)}
-                                        className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-                                    >
-                                        <Eye className="w-3.5 h-3.5" />
-                                        <span>View Member Profile</span>
-                                    </button>
-                                    <button
-                                        onClick={() => setSelectedMemberId(null)}
-                                        className="px-3 py-1.5 border border-gray-250 hover:bg-slate-50 text-gray-600 font-semibold rounded-lg text-xs transition-colors cursor-pointer"
-                                    >
-                                        Back
-                                    </button>
+                                <div className="min-w-0 flex-1">
+                                    <p className="font-bold text-xs text-gray-850 truncate">{selectedMemberStat.fullName}</p>
+                                    <p className="text-[10px] text-gray-505">
+                                        Status: <span className={`font-semibold capitalize ${selectedMemberStat.status === 'active' ? 'text-emerald-600' : 'text-amber-600'}`}>{selectedMemberStat.status}</span>
+                                    </p>
                                 </div>
                             </div>
-                        ) : (
-                            /* ─── DEFAULT: TODAY'S LIVE LOGS VIEW ─── */
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-                                    <div className="flex items-center gap-2">
-                                        <Clock className="w-4 h-4 text-indigo-600" />
-                                        <h3 className="font-bold text-gray-800 text-sm">Today's Logs</h3>
+
+                            {/* Summary Grid */}
+                            <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                                <div className="bg-indigo-50 border border-indigo-100/50 rounded-lg p-2">
+                                    <p className="text-base font-extrabold text-indigo-700">{selectedMemberStat.totalVisits}</p>
+                                    <p className="text-[8px] font-bold text-gray-500 uppercase tracking-wide">Days Attended</p>
+                                </div>
+                                <div className="bg-orange-50 border border-orange-100/50 rounded-lg p-2">
+                                    <p className="text-base font-extrabold text-orange-700">
+                                        {selectedMemberStat.currentStreak > 0 ? `🔥 ${selectedMemberStat.currentStreak}` : '0'}
+                                    </p>
+                                    <p className="text-[8px] font-bold text-gray-500 uppercase tracking-wide">Current Streak</p>
+                                </div>
+                            </div>
+
+                            {/* Detailed logs list */}
+                            <div className="space-y-2">
+                                <p className="text-[10px] font-bold text-gray-450 uppercase tracking-wider">Detailed Attendance Logs</p>
+                                
+                                {loadingHistory ? (
+                                    <div className="py-10 text-center space-y-2">
+                                        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                                        <p className="text-[10px] text-gray-400">Loading history logs...</p>
                                     </div>
-                                    <button
-                                        onClick={handleRefreshLogs}
-                                        disabled={refreshingLogs}
-                                        className="p-1 hover:bg-slate-100 rounded text-gray-450 hover:text-gray-650 cursor-pointer disabled:opacity-50"
-                                        title="Refresh Logs"
-                                    >
-                                        <RefreshCw className={`w-3.5 h-3.5 ${refreshingLogs ? 'animate-spin' : ''}`} />
-                                    </button>
-                                </div>
-
-                                {/* Live Count Pill */}
-                                <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2.5 text-center">
-                                    <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Live Check-ins Today</p>
-                                    <p className="text-2xl font-extrabold text-indigo-700 mt-0.5">{todaysLogs.length}</p>
-                                </div>
-
-                                {/* Logs Timeline */}
-                                <div className="space-y-3 overflow-y-auto max-h-[500px] pr-1 custom-scrollbar">
-                                    {todaysLogs.length === 0 ? (
-                                        <div className="text-center py-10 space-y-2">
-                                            <Fingerprint className="w-8 h-8 text-gray-300 mx-auto animate-pulse" />
-                                            <p className="text-xs text-gray-400">No check-ins yet today.</p>
-                                            <p className="text-[10px] text-gray-400">Logs appear instantly as members check in.</p>
-                                        </div>
-                                    ) : (
-                                        <div className="relative border-l border-indigo-100 ml-2.5 space-y-4">
-                                            {todaysLogs.map((log) => {
-                                                const m = log.members;
-                                                if (!m) return null;
-                                                const isSelected = selectedMemberId === m.id;
-                                                return (
-                                                    <div key={log.id} className="relative pl-5 group">
-                                                        <div className={`absolute -left-[4.5px] top-1.5 w-2 h-2 rounded-full border border-white group-hover:scale-125 transition-all ${
-                                                            isSelected ? 'bg-indigo-700 ring-2 ring-indigo-300' : 'bg-indigo-400'
-                                                        }`} />
-
-                                                        <div
-                                                            onClick={() => setSelectedMemberId(m.id)}
-                                                            className={`p-2 rounded-lg border transition-all cursor-pointer space-y-1.5 ${
-                                                                isSelected ? 'bg-indigo-50/50 border-indigo-200' : 'bg-slate-50/60 border-slate-100 hover:bg-slate-50 hover:border-indigo-150'
-                                                            }`}
-                                                        >
-                                                            <div className="flex items-center gap-2 min-w-0">
-                                                                <div className="w-6 h-6 rounded-full bg-indigo-50 flex items-center justify-center overflow-hidden flex-shrink-0">
-                                                                    {m.image_url ? (
-                                                                        <img src={m.image_url} alt={m.full_name} className="w-full h-full object-cover" />
-                                                                    ) : (
-                                                                        <User className="w-3.5 h-3.5 text-indigo-400" />
-                                                                    )}
-                                                                </div>
-                                                                <p className="font-semibold text-xs text-gray-850 truncate">{m.full_name}</p>
-                                                            </div>
-
-                                                            <div className="flex items-center justify-between text-[10px]">
-                                                                <span className="text-indigo-650 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">
-                                                                    🕒 {formatTime12h(log.check_in_time)}
-                                                                </span>
-                                                                <span className="text-gray-400 capitalize">
-                                                                    {log.method === 'fingerprint' ? '⚡ Fingerprint' : 'Manual'}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
+                                ) : memberHistory.length === 0 ? (
+                                    <p className="text-xs text-gray-400 py-6 text-center">No history logs recorded.</p>
+                                ) : (
+                                    <div className="space-y-2 overflow-y-auto max-h-[300px] pr-1 custom-scrollbar">
+                                        {memberHistory.map((h) => (
+                                            <div key={h.id} className="flex justify-between items-center p-2 bg-slate-50/50 border border-slate-100 rounded-lg">
+                                                <span className="text-[11px] font-semibold text-slate-800 flex items-center gap-1">
+                                                    📅 {formatDate(h.date)}
+                                                </span>
+                                                <span className="text-[10px] font-bold text-indigo-650 bg-indigo-50 px-2 py-0.5 rounded">
+                                                    {formatTime12h(h.check_in_time)}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
-                        )}
-                    </div>
+
+                            <div className="pt-2 flex gap-2">
+                                <button
+                                    onClick={() => navigate(`/members/${selectedMemberId}`)}
+                                    className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                                >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>View Member Profile</span>
+                                </button>
+                                <button
+                                    onClick={() => setSelectedMemberId(null)}
+                                    className="px-3 py-1.5 border border-gray-250 hover:bg-slate-50 text-gray-600 font-semibold rounded-lg text-xs transition-colors cursor-pointer"
+                                >
+                                    Back
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
