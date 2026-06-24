@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Search, Filter, MessageSquare } from 'lucide-react';
+import { Plus, Search, MessageSquare } from 'lucide-react';
 import { AddMemberModal } from '../components/members/AddMemberModal';
 import { getMembers } from '../lib/api/members';
 import type { Member } from '../types';
@@ -137,9 +137,9 @@ const MembersList: React.FC = () => {
                 </button>
             </div>
 
-            {/* Filters */}
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col sm:flex-row gap-4">
-                <div className="flex-1 relative">
+            {/* Filters & Search */}
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col gap-4">
+                <div className="relative">
                     <Search className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
                     <input
                         type="text"
@@ -149,20 +149,33 @@ const MembersList: React.FC = () => {
                         className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                     />
                 </div>
-                <div className="flex items-center gap-2">
-                    <Filter className="w-5 h-5 text-gray-400" />
-                    <select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value as any)}
-                        className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-slate-700 bg-white"
-                    >
-                        <option value="all">All Status</option>
-                        <option value="active">Active</option>
-                        <option value="expired">Expired</option>
-                        <option value="inactive">Inactive</option>
-                        <option value="expiring">Expiring Soon</option>
-                        <option value="archived">Archived</option>
-                    </select>
+                <div className="flex flex-wrap gap-2 items-center pt-2 border-t border-gray-50">
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mr-2">Status:</span>
+                    {(['all', 'active', 'expired', 'inactive', 'expiring', 'archived'] as const).map((filter) => {
+                        const isActive = statusFilter === filter;
+                        const labels: Record<string, string> = {
+                            all: 'All',
+                            active: 'Active',
+                            expired: 'Expired',
+                            inactive: 'Inactive',
+                            expiring: 'Expiring Soon',
+                            archived: 'Archived'
+                        };
+                        return (
+                            <button
+                                key={filter}
+                                onClick={() => setStatusFilter(filter)}
+                                className={clsx(
+                                    "px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer shadow-sm",
+                                    isActive
+                                        ? "bg-indigo-600 border-indigo-600 text-white"
+                                        : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                                )}
+                            >
+                                {labels[filter]}
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -173,8 +186,7 @@ const MembersList: React.FC = () => {
                         <thead className="bg-gray-50 border-b border-gray-200">
                             <tr>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Member</th>
-                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
-                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Expiration Date</th>
+                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">WhatsApp</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Days Left</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Join Date</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
@@ -184,11 +196,11 @@ const MembersList: React.FC = () => {
                         <tbody className="divide-y divide-gray-200">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">Loading members...</td>
+                                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">Loading members...</td>
                                 </tr>
                             ) : members.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">No members found.</td>
+                                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">No members found.</td>
                                 </tr>
                             ) : (
                                 members.map((member) => {
@@ -196,8 +208,8 @@ const MembersList: React.FC = () => {
                                     return (
                                         <tr key={member.id} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold overflow-hidden">
+                                                <Link to={`/members/${member.id}`} className="flex items-center gap-3 group">
+                                                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold overflow-hidden group-hover:scale-105 transition-transform duration-200">
                                                         {member.imageUrl ? (
                                                             <img src={member.imageUrl} alt={member.fullName} className="w-full h-full object-cover" />
                                                         ) : (
@@ -205,22 +217,20 @@ const MembersList: React.FC = () => {
                                                         )}
                                                     </div>
                                                     <div>
-                                                        <p className="font-medium text-gray-900">{member.fullName}</p>
+                                                        <p className="font-medium text-gray-900 group-hover:text-indigo-600 transition-colors">{member.fullName}</p>
                                                         <p className="text-xs text-gray-500">{member.gender}</p>
                                                     </div>
-                                                </div>
+                                                </Link>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-gray-600">
-                                                <div className="flex items-center gap-2">
-                                                    <span>{member.phone || '-'}</span>
-                                                    {member.phone && (
-                                                        <a
-                                                            href={(() => {
-                                                                let cleanPhone = member.phone.replace(/\D/g, '');
-                                                                if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
+                                                {member.phone ? (
+                                                    <a
+                                                        href={(() => {
+                                                            let cleanPhone = member.phone.replace(/\D/g, '');
+                                                            if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
 
-                                                                const msg = member.status === 'expired'
-                                                                    ? `${String.fromCodePoint(0x1F6A8)} Hi ${member.fullName},
+                                                            const msg = member.status === 'expired'
+                                                                ? `${String.fromCodePoint(0x1F6A8)} Hi ${member.fullName},
 
 Your Iron Gym membership has expired.
 
@@ -231,7 +241,7 @@ ${String.fromCodePoint(0x2728)} Don't miss out on your routine, progress, and gy
 ${String.fromCodePoint(0x1F4DE)} Reply or visit the front desk to renew.
 
 ${String.fromCodePoint(0x1F525)} Iron Gym Team`
-                                                                    : `${String.fromCodePoint(0x26A1)} Hi ${member.fullName},
+                                                                : `${String.fromCodePoint(0x26A1)} Hi ${member.fullName},
 
 ${String.fromCodePoint(0x1F6A8)} Your Iron Gym membership will expire soon.
 
@@ -241,20 +251,18 @@ ${String.fromCodePoint(0x1F4AA)} Consistency is the key to results—keep the mo
 
 ${String.fromCodePoint(0x1F525)} Iron Gym Team`;
 
-                                                                return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
-                                                            })()}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="text-emerald-600 hover:text-emerald-700 p-1 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-md transition-colors flex items-center justify-center cursor-pointer shadow-sm"
-                                                            title="Send WhatsApp Alert"
-                                                        >
-                                                            <MessageSquare className="w-4 h-4" />
-                                                        </a>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-gray-600 text-sm">
-                                                {subInfo ? subInfo.endDate : 'N/A'}
+                                                            return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+                                                        })()}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-emerald-600 hover:text-emerald-700 p-2 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-lg transition-colors flex items-center justify-center cursor-pointer shadow-sm w-9 h-9"
+                                                        title={`Send WhatsApp Alert to ${member.phone}`}
+                                                    >
+                                                        <MessageSquare className="w-5 h-5" />
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-gray-400 text-sm">-</span>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 {subInfo ? (
