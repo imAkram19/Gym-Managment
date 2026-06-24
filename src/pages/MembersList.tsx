@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Search, MessageSquare } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { AddMemberModal } from '../components/members/AddMemberModal';
 import { getMembers } from '../lib/api/members';
 import type { Member } from '../types';
@@ -186,7 +186,7 @@ const MembersList: React.FC = () => {
                         <thead className="bg-gray-50 border-b border-gray-200">
                             <tr>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Member</th>
-                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">WhatsApp</th>
+                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">WhatsApp</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Days Left</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Join Date</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
@@ -222,15 +222,16 @@ const MembersList: React.FC = () => {
                                                     </div>
                                                 </Link>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-gray-600">
-                                                {member.phone ? (
-                                                    <a
-                                                        href={(() => {
-                                                            let cleanPhone = member.phone.replace(/\D/g, '');
-                                                            if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
+                                            <td className="px-6 py-4 whitespace-nowrap text-gray-600 text-center">
+                                                <div className="flex justify-center">
+                                                    {member.phone ? (
+                                                        <a
+                                                            href={(() => {
+                                                                let cleanPhone = member.phone.replace(/\D/g, '');
+                                                                if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
 
-                                                            const msg = member.status === 'expired'
-                                                                ? `${String.fromCodePoint(0x1F6A8)} Hi ${member.fullName},
+                                                                const msg = member.status === 'expired'
+                                                                    ? `${String.fromCodePoint(0x1F6A8)} Hi ${member.fullName},
 
 Your Iron Gym membership has expired.
 
@@ -241,7 +242,7 @@ ${String.fromCodePoint(0x2728)} Don't miss out on your routine, progress, and gy
 ${String.fromCodePoint(0x1F4DE)} Reply or visit the front desk to renew.
 
 ${String.fromCodePoint(0x1F525)} Iron Gym Team`
-                                                                : `${String.fromCodePoint(0x26A1)} Hi ${member.fullName},
+                                                                    : `${String.fromCodePoint(0x26A1)} Hi ${member.fullName},
 
 ${String.fromCodePoint(0x1F6A8)} Your Iron Gym membership will expire soon.
 
@@ -251,18 +252,21 @@ ${String.fromCodePoint(0x1F4AA)} Consistency is the key to results—keep the mo
 
 ${String.fromCodePoint(0x1F525)} Iron Gym Team`;
 
-                                                            return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
-                                                        })()}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-emerald-600 hover:text-emerald-700 p-2 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-lg transition-colors flex items-center justify-center cursor-pointer shadow-sm w-9 h-9"
-                                                        title={`Send WhatsApp Alert to ${member.phone}`}
-                                                    >
-                                                        <MessageSquare className="w-5 h-5" />
-                                                    </a>
-                                                ) : (
-                                                    <span className="text-gray-400 text-sm">-</span>
-                                                )}
+                                                                return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+                                                            })()}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-emerald-600 hover:text-emerald-700 p-2 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-lg transition-colors flex items-center justify-center cursor-pointer shadow-sm w-9 h-9"
+                                                            title={`Send WhatsApp Alert to ${member.phone}`}
+                                                        >
+                                                            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current">
+                                                                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.625 1.451 5.437 0 9.862-4.427 9.866-9.869.002-2.637-1.019-5.117-2.877-6.98C16.398 1.887 13.916.86 11.277.86c-5.44 0-9.866 4.428-9.87 9.871-.001 1.721.45 3.398 1.305 4.887l-.99 3.614 3.705-.972c1.428.777 2.9.18 4.63-.418zm10.377-6.68c-.27-.136-1.603-.79-1.854-.88-.25-.09-.432-.136-.614.136-.18.272-.7.88-.857 1.058-.157.178-.315.2-.585.064-1.547-.772-2.656-1.34-3.706-3.143-.277-.476.277-.442.793-1.472.086-.178.043-.334-.022-.47-.064-.136-.614-1.48-.84-2.027-.22-.53-.443-.457-.614-.466-.16-.008-.344-.01-.528-.01-.184 0-.485.07-.74.348-.253.278-.967.947-.967 2.308 0 1.36.99 2.673 1.127 2.862.137.188 1.947 2.974 4.718 4.167.658.283 1.173.453 1.574.58.662.21 1.266.18 1.743.11.53-.08 1.603-.655 1.83-1.258.226-.603.226-1.12.157-1.23-.07-.11-.258-.178-.528-.314z"/>
+                                                            </svg>
+                                                        </a>
+                                                    ) : (
+                                                        <span className="text-gray-400 text-sm">-</span>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 {subInfo ? (
