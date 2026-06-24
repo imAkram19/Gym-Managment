@@ -28,6 +28,7 @@ const MembersList: React.FC = () => {
 
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [members, setMembers] = useState<Member[]>([]);
+    const [subscriptions, setSubscriptions] = useState<Record<string, { endDate: string; remainingDays: number; isActive: boolean }>>({});
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'expired' | 'inactive' | 'expiring' | 'archived'>(() => {
@@ -41,6 +42,7 @@ const MembersList: React.FC = () => {
     const fetchMembersData = async () => {
         setLoading(true);
         try {
+            let fetchedMembers: Member[] = [];
             if (statusFilter === 'expiring') {
                 const sevenDaysFromNow = new Date();
                 sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
@@ -57,7 +59,7 @@ const MembersList: React.FC = () => {
                 const memberIds = expiringSubs?.map(s => s.member_id) || [];
 
                 if (memberIds.length === 0) {
-                    setMembers([]);
+                    fetchedMembers = [];
                 } else {
                     let query = supabase.from('members').select('*').in('id', memberIds);
                     if (search) {
@@ -65,11 +67,47 @@ const MembersList: React.FC = () => {
                     }
                     const { data, error } = await query;
                     if (error) throw error;
-                    setMembers((data || []).map(mapMember));
+                    fetchedMembers = (data || []).map(mapMember);
                 }
             } else {
-                const data = await getMembers(search, statusFilter);
-                setMembers(data);
+                fetchedMembers = await getMembers(search, statusFilter);
+            }
+
+            setMembers(fetchedMembers);
+
+            // Fetch subscriptions for these members to get expiration dates & remaining days
+            if (fetchedMembers.length > 0) {
+                const memberIds = fetchedMembers.map(m => m.id);
+                const { data: subs, error: subsError } = await supabase
+                    .from('subscriptions')
+                    .select('member_id, end_date, is_active')
+                    .in('member_id', memberIds)
+                    .order('end_date', { ascending: false });
+
+                if (subsError) throw subsError;
+
+                const subsMap: Record<string, { endDate: string; remainingDays: number; isActive: boolean }> = {};
+                subs?.forEach((sub: any) => {
+                    const existing = subsMap[sub.member_id];
+                    
+                    const endDate = new Date(sub.end_date);
+                    const today = new Date();
+                    endDate.setHours(0, 0, 0, 0);
+                    today.setHours(0, 0, 0, 0);
+                    const diffTime = endDate.getTime() - today.getTime();
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                    if (!existing || (sub.is_active && !existing.isActive)) {
+                        subsMap[sub.member_id] = {
+                            endDate: sub.end_date,
+                            remainingDays: diffDays,
+                            isActive: sub.is_active
+                        };
+                    }
+                });
+                setSubscriptions(subsMap);
+            } else {
+                setSubscriptions({});
             }
         } catch (error) {
             console.error("Failed to fetch members", error);
@@ -136,6 +174,8 @@ const MembersList: React.FC = () => {
                             <tr>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Member</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
+                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Expiration Date</th>
+                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Days Left</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Join Date</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
@@ -144,41 +184,43 @@ const MembersList: React.FC = () => {
                         <tbody className="divide-y divide-gray-200">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">Loading members...</td>
+                                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">Loading members...</td>
                                 </tr>
                             ) : members.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">No members found.</td>
+                                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">No members found.</td>
                                 </tr>
                             ) : (
-                                members.map((member) => (
-                                    <tr key={member.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold overflow-hidden">
-                                                    {member.imageUrl ? (
-                                                        <img src={member.imageUrl} alt={member.fullName} className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        member.fullName.charAt(0).toUpperCase()
-                                                    )}
+                                members.map((member) => {
+                                    const subInfo = subscriptions[member.id];
+                                    return (
+                                        <tr key={member.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold overflow-hidden">
+                                                        {member.imageUrl ? (
+                                                            <img src={member.imageUrl} alt={member.fullName} className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            member.fullName.charAt(0).toUpperCase()
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-medium text-gray-900">{member.fullName}</p>
+                                                        <p className="text-xs text-gray-500">{member.gender}</p>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <p className="font-medium text-gray-900">{member.fullName}</p>
-                                                    <p className="text-xs text-gray-500">{member.gender}</p>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-gray-600">
-                                            <div className="flex items-center gap-2">
-                                                <span>{member.phone || '-'}</span>
-                                                {member.phone && (
-                                                    <a
-                                                        href={(() => {
-                                                            let cleanPhone = member.phone.replace(/\D/g, '');
-                                                            if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-gray-600">
+                                                <div className="flex items-center gap-2">
+                                                    <span>{member.phone || '-'}</span>
+                                                    {member.phone && (
+                                                        <a
+                                                            href={(() => {
+                                                                let cleanPhone = member.phone.replace(/\D/g, '');
+                                                                if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
 
-                                                            const msg = member.status === 'expired'
-                                                                ? `${String.fromCodePoint(0x1F6A8)} Hi ${member.fullName},
+                                                                const msg = member.status === 'expired'
+                                                                    ? `${String.fromCodePoint(0x1F6A8)} Hi ${member.fullName},
 
 Your Iron Gym membership has expired.
 
@@ -189,7 +231,7 @@ ${String.fromCodePoint(0x2728)} Don't miss out on your routine, progress, and gy
 ${String.fromCodePoint(0x1F4DE)} Reply or visit the front desk to renew.
 
 ${String.fromCodePoint(0x1F525)} Iron Gym Team`
-                                                                : `${String.fromCodePoint(0x26A1)} Hi ${member.fullName},
+                                                                    : `${String.fromCodePoint(0x26A1)} Hi ${member.fullName},
 
 ${String.fromCodePoint(0x1F6A8)} Your Iron Gym membership will expire soon.
 
@@ -199,40 +241,63 @@ ${String.fromCodePoint(0x1F4AA)} Consistency is the key to results—keep the mo
 
 ${String.fromCodePoint(0x1F525)} Iron Gym Team`;
 
-                                                            return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
-                                                        })()}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-emerald-500 hover:text-emerald-600 p-0.5 hover:bg-emerald-50 rounded transition-colors flex items-center justify-center cursor-pointer"
-                                                        title="Send WhatsApp Alert"
-                                                    >
-                                                        <MessageSquare className="w-4 h-4" />
-                                                    </a>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-gray-600">{member.joinDate}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={clsx(
-                                                "px-2.5 py-1 text-xs font-semibold rounded-full border shadow-sm inline-flex items-center",
-                                                member.deletedAt
-                                                    ? "bg-purple-50 text-purple-700 border-purple-200"
-                                                    : member.status === 'active'
-                                                        ? "bg-green-50 text-green-700 border-green-200"
-                                                        : member.status === 'expired'
+                                                                return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+                                                            })()}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-emerald-600 hover:text-emerald-700 p-1 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-md transition-colors flex items-center justify-center cursor-pointer shadow-sm"
+                                                            title="Send WhatsApp Alert"
+                                                        >
+                                                            <MessageSquare className="w-4 h-4" />
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-gray-600 text-sm">
+                                                {subInfo ? subInfo.endDate : 'N/A'}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                {subInfo ? (
+                                                    <span className={clsx(
+                                                        "px-2.5 py-0.5 rounded-full text-xs font-semibold inline-flex items-center border shadow-sm",
+                                                        subInfo.remainingDays < 0
                                                             ? "bg-red-50 text-red-700 border-red-200"
-                                                            : "bg-gray-50 text-gray-700 border-gray-200"
-                                            )}>
-                                                {member.deletedAt ? 'Archived' : member.status.charAt(0).toUpperCase() + member.status.slice(1)}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <Link to={`/members/${member.id}`} className="text-indigo-600 hover:text-indigo-900">
-                                                View
-                                            </Link>
-                                        </td>
-                                    </tr>
-                                ))
+                                                            : subInfo.remainingDays <= 7
+                                                                ? "bg-amber-50 text-amber-700 border-amber-200"
+                                                                : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                    )}>
+                                                        {subInfo.remainingDays < 0 
+                                                            ? `Expired (${Math.abs(subInfo.remainingDays)} days ago)` 
+                                                            : `${subInfo.remainingDays} days left`
+                                                        }
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-gray-400">N/A</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-gray-600">{member.joinDate}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className={clsx(
+                                                    "px-2.5 py-1 text-xs font-semibold rounded-full border shadow-sm inline-flex items-center",
+                                                    member.deletedAt
+                                                        ? "bg-purple-50 text-purple-700 border-purple-200"
+                                                        : member.status === 'active'
+                                                            ? "bg-green-50 text-green-700 border-green-200"
+                                                            : member.status === 'expired'
+                                                                ? "bg-red-50 text-red-700 border-red-200"
+                                                                : "bg-gray-50 text-gray-700 border-gray-200"
+                                                )}>
+                                                    {member.deletedAt ? 'Archived' : member.status.charAt(0).toUpperCase() + member.status.slice(1)}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                <Link to={`/members/${member.id}`} className="text-indigo-600 hover:text-indigo-900">
+                                                    View
+                                                </Link>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>

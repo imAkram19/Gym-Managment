@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Menu, Bell, CheckCircle, AlertCircle, X, WifiOff, LogOut, Fingerprint } from 'lucide-react';
+import { Menu, Bell, CheckCircle, AlertCircle, X, WifiOff, LogOut, Fingerprint, ChevronRight } from 'lucide-react';
 import { getBiometricDevices } from '../../lib/api/biometrics';
 import type { BiometricDevice } from '../../types';
 
 interface TopBarProps {
     onMenuClick: () => void;
+    isSidebarCollapsed?: boolean;
+    onToggleCollapse?: () => void;
 }
 
 interface NotificationItem {
@@ -31,7 +33,7 @@ function formatLastPing(lastPing: string | undefined): string {
     return `${hrs}h ago`;
 }
 
-export const TopBar: React.FC<TopBarProps> = ({ onMenuClick }) => {
+export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, isSidebarCollapsed, onToggleCollapse }) => {
     const [showNotifications, setShowNotifications] = useState(false);
     const notificationRef = useRef<HTMLDivElement>(null);
 
@@ -131,6 +133,17 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick }) => {
                         >
                             <Menu className="w-6 h-6 text-gray-600" />
                         </button>
+
+                        {/* Desktop Expand Button when Sidebar is collapsed */}
+                        {isSidebarCollapsed && (
+                            <button
+                                onClick={onToggleCollapse}
+                                className="p-1.5 hover:bg-gray-100 rounded-lg hidden lg:flex items-center justify-center cursor-pointer text-gray-500 border border-gray-200 hover:text-gray-700 hover:border-gray-300 transition-colors"
+                                title="Expand Sidebar"
+                            >
+                                <ChevronRight className="w-5 h-5" />
+                            </button>
+                        )}
 
                         {/* ── Device Status Pill ── */}
                         {devices.length === 0 ? (

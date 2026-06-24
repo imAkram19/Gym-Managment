@@ -21,8 +21,7 @@ import {
     enrollMemberBiometrics,
     deleteBiometricEnrollment,
     getBiometricAttendanceLogs,
-    syncMemberStatuses,
-    resetBiometricTestData
+    syncMemberStatuses
 } from '../lib/api/biometrics';
 import type {
     BiometricEnrollmentWithMember,
@@ -200,25 +199,7 @@ const Biometrics: React.FC = () => {
         }
     };
 
-    const handleResetTestData = async () => {
-        const confirmClear = confirm('This will delete all biometric enrollments and all biometric attendance logs. Do you want to continue?');
-        if (!confirmClear) return;
 
-        const keepMembers = confirm('Do you want to KEEP your gym member profiles? (Click Cancel to delete all members, subscriptions, payments, and biometrics together)');
-        
-        setLoading(true);
-        setErrorMsg('');
-        setSuccessMsg('');
-        try {
-            await resetBiometricTestData(keepMembers);
-            setSuccessMsg('Biometric test data reset successfully!');
-            await loadData();
-        } catch (err: any) {
-            setErrorMsg(err.message || 'Failed to reset test data.');
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const getDaysRemainingForMember = (memberId: string) => {
         const activeSub = subscriptions.find(s => s.memberId === memberId && s.isActive);
@@ -265,14 +246,7 @@ const Biometrics: React.FC = () => {
                     <p className="text-gray-500 mt-1">Manage ZKTeco K40 hardware, fingerprint enrollments, and check-in logs.</p>
                 </div>
                 <div className="flex gap-2">
-                    <button
-                        onClick={handleResetTestData}
-                        disabled={loading}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center gap-2 text-sm font-semibold shadow-sm transition-colors cursor-pointer"
-                    >
-                        <Trash2 className="w-4 h-4" />
-                        Reset Test Data
-                    </button>
+
                     <button
                         onClick={handleSyncStatuses}
                         disabled={loading}

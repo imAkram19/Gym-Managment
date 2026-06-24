@@ -7,16 +7,19 @@ import {
     CalendarCheck,
     X,
     Dumbbell,
-    Fingerprint
+    Fingerprint,
+    ChevronLeft
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
 interface SidebarProps {
     isOpen: boolean;
     onClose: () => void;
+    isCollapsed: boolean;
+    onToggleCollapse: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
     const navItems = [
         { label: 'Dashboard', path: '/', icon: LayoutDashboard },
         { label: 'Members', path: '/members', icon: Users },
@@ -39,16 +42,29 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             {/* Sidebar Content */}
             <aside
                 className={clsx(
-                    "fixed top-0 left-0 h-full w-64 bg-slate-900 text-white z-30 transition-transform duration-300 lg:translate-x-0 lg:static",
-                    isOpen ? "translate-x-0" : "-translate-x-full"
+                    "fixed top-0 left-0 h-full w-64 bg-slate-900 text-white z-30 transition-transform duration-300 ease-in-out flex flex-col",
+                    isOpen 
+                        ? "translate-x-0" 
+                        : isCollapsed 
+                            ? "-translate-x-full" 
+                            : "-translate-x-full lg:translate-x-0"
                 )}
             >
                 {/* Logo Area */}
-                <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800">
+                <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800 flex-shrink-0">
                     <div className="flex items-center gap-2 font-bold text-xl tracking-tight">
                         <Dumbbell className="w-6 h-6 text-indigo-400" />
                         <span>Iron Gym</span>
                     </div>
+                    {/* Desktop Collapse Button */}
+                    <button
+                        onClick={onToggleCollapse}
+                        className="hidden lg:flex p-1.5 hover:bg-slate-800 hover:text-white rounded text-slate-400 cursor-pointer transition-colors"
+                        title="Collapse Sidebar"
+                    >
+                        <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    {/* Mobile Close Button */}
                     <button
                         onClick={onClose}
                         className="lg:hidden p-1 hover:bg-slate-800 rounded text-slate-400"
@@ -58,7 +74,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                 </div>
 
                 {/* Navigation */}
-                <nav className="p-4 space-y-2">
+                <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
                     {navItems.map((item) => (
                         <NavLink
                             key={item.path}
