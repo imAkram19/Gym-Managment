@@ -116,129 +116,27 @@ export interface MemberAttendanceStat {
 }
 
 export const getMemberAttendanceMetrics = async (): Promise<MemberAttendanceStat[]> => {
-    // Fetch all attendance records joined with active members (not deleted)
-    const { data: records, error } = await supabase
-        .from('attendance')
-        .select(`
-            member_id,
-            date,
-            check_in_time,
-            members!inner (id, full_name, image_url, phone, status, deleted_at)
-        `)
-        .is('members.deleted_at', null)
-        .order('date', { ascending: false });
+    const { data, error } = await supabase.rpc('get_member_attendance_metrics_rpc');
 
     if (error) {
-        console.error('Error fetching attendance metrics:', error);
+        console.error('Error fetching attendance metrics via RPC:', error);
         return [];
     }
 
-    if (!records || records.length === 0) return [];
-
-    // Group records by member
-    const byMember = new Map<string, { member: any; dates: string[]; times: string[] }>();
-
-    for (const r of records as any[]) {
-        const m = r.members;
-        if (!m) continue;
-        if (!byMember.has(r.member_id)) {
-            byMember.set(r.member_id, { member: m, dates: [], times: [] });
-        }
-        const entry = byMember.get(r.member_id)!;
-        entry.dates.push(r.date);
-        if (r.check_in_time) entry.times.push(r.check_in_time);
-    }
-
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-
-    // First day of current month
-    const monthStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
-
-    // 7 days ago
-    const sevenDaysAgo = new Date(today);
-    sevenDaysAgo.setDate(today.getDate() - 6);
-    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
-
-    // 30 days ago
-    const thirtyDaysAgo = new Date(today);
-    thirtyDaysAgo.setDate(today.getDate() - 29);
-    const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
-
-    const stats: MemberAttendanceStat[] = [];
-
-    for (const [memberId, { member, dates, times }] of byMember) {
-        // Sort dates ascending for streak calc
-        const sortedDates = [...new Set(dates)].sort();
-        const lastCheckIn = sortedDates[sortedDates.length - 1] ?? null;
-
-        // Days since last visit
-        let daysSinceLastVisit: number | null = null;
-        if (lastCheckIn) {
-            const last = new Date(lastCheckIn);
-            daysSinceLastVisit = Math.floor((today.getTime() - last.getTime()) / 86400000);
-        }
-
-        // Visits this month
-        const visitsThisMonth = dates.filter(d => d >= monthStart).length;
-
-        // Visits this week (rolling 7 days)
-        const visitsThisWeek = dates.filter(d => d >= sevenDaysAgoStr).length;
-
-        // Recent 30-day dates
-        const recentDates = dates.filter(d => d >= thirtyDaysAgoStr);
-
-        // Current streak (consecutive days from today backwards)
-        let streak = 0;
-        const dateSet = new Set(sortedDates);
-        const cursor = new Date(today);
-        // Start from today or yesterday
-        if (!dateSet.has(todayStr)) cursor.setDate(cursor.getDate() - 1);
-        while (true) {
-            const s = cursor.toISOString().split('T')[0];
-            if (!dateSet.has(s)) break;
-            streak++;
-            cursor.setDate(cursor.getDate() - 1);
-        }
-
-        // Avg visits per week (over last 4 weeks)
-        const fourWeeksAgo = new Date(today);
-        fourWeeksAgo.setDate(today.getDate() - 28);
-        const fourWeeksAgoStr = fourWeeksAgo.toISOString().split('T')[0];
-        const visitsIn4Weeks = dates.filter(d => d >= fourWeeksAgoStr).length;
-        const avgVisitsPerWeek = parseFloat((visitsIn4Weeks / 4).toFixed(1));
-
-        // Preferred time (from check_in_time HH:mm:ss)
-        let preferredTime: string | null = null;
-        if (times.length > 0) {
-            const timeBuckets = { Morning: 0, Afternoon: 0, Evening: 0 };
-            for (const t of times) {
-                const hour = parseInt(t.split(':')[0], 10);
-                if (hour >= 5 && hour < 12) timeBuckets.Morning++;
-                else if (hour >= 12 && hour < 17) timeBuckets.Afternoon++;
-                else timeBuckets.Evening++;
-            }
-            preferredTime = (Object.entries(timeBuckets).sort((a, b) => b[1] - a[1])[0][0]) as string;
-        }
-
-        stats.push({
-            memberId,
-            fullName: member.full_name,
-            imageUrl: member.image_url,
-            phone: member.phone,
-            status: member.status,
-            totalVisits: dates.length,
-            visitsThisMonth,
-            visitsThisWeek,
-            lastCheckIn,
-            daysSinceLastVisit,
-            currentStreak: streak,
-            avgVisitsPerWeek,
-            preferredTime,
-            recentDates,
-        });
-    }
-
-    // Sort by total visits descending
-    return stats.sort((a, b) => b.totalVisits - a.totalVisits);
+    return (data || []).map((m: any) => ({
+        memberId: m.memberId,
+        fullName: m.fullName,
+        imageUrl: m.imageUrl,
+        phone: m.phone,
+        status: m.status,
+        totalVisits: m.totalVisits,
+        visitsThisMonth: m.visitsThisMonth,
+        visitsThisWeek: m.visitsThisWeek,
+        lastCheckIn: m.lastCheckIn,
+        daysSinceLastVisit: m.daysSinceLastVisit,
+        currentStreak: m.currentStreak,
+        avgVisitsPerWeek: Number(m.avgVisitsPerWeek),
+        preferredTime: m.preferredTime,
+        recentDates: m.recentDates || []
+    })).sort((a: any, b: any) => b.totalVisits - a.totalVisits);
 };

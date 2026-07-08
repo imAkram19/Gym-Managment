@@ -38,7 +38,11 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
     process.exit(1);
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const ws = require('ws');
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: { persistSession: false },
+    realtime: { transport: ws }
+});
 let dbDevice = null; // Holds the registered device record from database
 let zkInstance = null; // Holds the active ZKLib client instance
 
@@ -47,7 +51,7 @@ let isConnecting = false;
 let isConnected = false;
 let isSyncing = false;
 let reconnectTimer = null;
-let scansPollInterval = null;
+let pollTimeoutId = null; // Changed from scansPollInterval to support adaptive backoff
 let syncTasksInterval = null;
 let memberStatusInterval = null;
 let healthCheckInterval = null;
@@ -62,6 +66,14 @@ let processedScansAtLastTimestamp = new Set();
 // Cache of users enrolled on the device
 let deviceUsersCache = [];
 let lastCacheRefreshTime = 0;
+
+// In-memory locking for concurrency control
+const currentlyProcessingScans = new Set();
+
+// Adaptive polling interval variables for backoff control
+let currentScanPollInterval = SCAN_POLL_INTERVAL;
+const DEFAULT_POLL_INTERVAL = SCAN_POLL_INTERVAL;
+const MAX_BACKOFF_INTERVAL = 5 * 60 * 1000; // Max 5 minutes
 
 // Log startup sequence and check crash status
 logger.info('==================================================');
@@ -135,21 +147,19 @@ async function initializeState() {
     if (res && res.data) {
         lastProcessedTimestamp = res.data.scan_timestamp;
         processedScansAtLastTimestamp.clear();
-        processedScansAtLastTimestamp.add(`${res.data.device_user_id}-${res.data.scan_timestamp}`);
+        const timeMs = new Date(res.data.scan_timestamp).getTime();
+        processedScansAtLastTimestamp.add(`${parseInt(res.data.device_user_id, 10)}-${timeMs}`);
         saveState();
         logger.info(`[State] State successfully initialized from Supabase latest log: ${lastProcessedTimestamp}`);
         return;
     }
 
-    // Priority 3: Query latest K40 attendance log
+    logger.info('[State] Priority 3: Querying latest log from physical device memory...');
+    // Priority 3: Query latest log from physical device
     if (!ZK_SIMULATE) {
-        logger.info('[State] No attendance records found in Supabase. Priority 3: Querying latest log from physical K40 device...');
         try {
-            const tempZk = new ZKLib(DEVICE_IP, DEVICE_PORT, 10000, 4000);
-            await tempZk.createSocket();
-            const attendances = await tempZk.getAttendances();
-            await tempZk.disconnect();
-            
+            await initDeviceConnection();
+            const attendances = await zkInstance.getAttendances();
             if (attendances && attendances.data && attendances.data.length > 0) {
                 const sorted = attendances.data.sort((a, b) => 
                     new Date(b.recordTime).getTime() - new Date(a.recordTime).getTime()
@@ -157,7 +167,8 @@ async function initializeState() {
                 const latest = sorted[0];
                 lastProcessedTimestamp = new Date(latest.recordTime).toISOString();
                 processedScansAtLastTimestamp.clear();
-                processedScansAtLastTimestamp.add(`${latest.deviceUserId}-${lastProcessedTimestamp}`);
+                const timeMs = new Date(lastProcessedTimestamp).getTime();
+                processedScansAtLastTimestamp.add(`${parseInt(latest.deviceUserId, 10)}-${timeMs}`);
                 saveState();
                 logger.info(`[State] State successfully initialized from K40 device logs: ${lastProcessedTimestamp}`);
                 return;
@@ -181,9 +192,9 @@ function markScanAsProcessed(deviceUserId, isoTime) {
     if (logTime > lastTime) {
         lastProcessedTimestamp = isoTime;
         processedScansAtLastTimestamp.clear();
-        processedScansAtLastTimestamp.add(`${deviceUserId}-${isoTime}`);
+        processedScansAtLastTimestamp.add(`${parseInt(deviceUserId, 10)}-${logTime}`);
     } else if (logTime === lastTime) {
-        processedScansAtLastTimestamp.add(`${deviceUserId}-${isoTime}`);
+        processedScansAtLastTimestamp.add(`${parseInt(deviceUserId, 10)}-${logTime}`);
     }
     saveState();
 }
@@ -208,17 +219,35 @@ function acquireInstanceLock() {
     });
 }
 
-// 3. Safe Supabase call wrapper
+// 3. Safe Supabase call wrapper with adaptive backoff on failures
 async function safeSupabaseCall(fn, context) {
     try {
         const result = await fn();
         if (result && result.error) {
             logger.error(`[Supabase Error] Database issue in "${context}": ${result.error.message}`, result.error);
+            handleSupabaseFailure(result.error);
+        } else {
+            handleSupabaseSuccess();
         }
         return result;
     } catch (err) {
         logger.error(`[Supabase Error] Network/Connection failure in "${context}":`, err);
+        handleSupabaseFailure(err);
         return null;
+    }
+}
+
+function handleSupabaseFailure(error) {
+    if (currentScanPollInterval < MAX_BACKOFF_INTERVAL) {
+        currentScanPollInterval = Math.min(MAX_BACKOFF_INTERVAL, currentScanPollInterval * 2);
+        logger.warn(`[Backoff] Supabase call failed. Doubling scan polling interval to ${currentScanPollInterval / 1000} seconds.`);
+    }
+}
+
+function handleSupabaseSuccess() {
+    if (currentScanPollInterval !== DEFAULT_POLL_INTERVAL) {
+        currentScanPollInterval = DEFAULT_POLL_INTERVAL;
+        logger.info(`[Backoff] Supabase connection is healthy. Restored scan polling interval to ${currentScanPollInterval / 1000} seconds.`);
     }
 }
 
@@ -282,21 +311,12 @@ async function insertBiometricAttendanceLog(status, parsedUserId, timestamp, mem
   - device_user_id: ${payload.device_user_id}
   - payload: ${JSON.stringify(payload)}`);
 
-    const res = await supabase
+    const res = await safeSupabaseCall(() => supabase
         .from('biometric_attendance_logs')
-        .insert([payload]);
+        .insert([payload])
+    , 'insert biometric attendance log');
 
-    if (res && res.error) {
-        logger.error(`[Defensive Error] Foreign key or constraint failure in biometric_attendance_logs:
-  - Error Message: ${res.error.message}
-  - Error Code: ${res.error.code}
-  - Diagnostic device_id: ${payload.device_id}
-  - Diagnostic device_name: ${deviceName}
-  - Diagnostic member_id: ${memberId}
-  - Diagnostic device_user_id: ${payload.device_user_id}
-  - Diagnostic payload: ${JSON.stringify(payload)}
-  - Details: ${JSON.stringify(res.error)}`);
-    } else {
+    if (res && !res.error) {
         logger.info(`[Biometric Log Success] Log inserted. status: ${status}`);
     }
 
@@ -418,7 +438,7 @@ async function syncBiometricEnrollments() {
     const res = await safeSupabaseCall(() => supabase
         .from('biometric_enrollments')
         .select('id, device_user_id, sync_status, member_id')
-        .in('sync_status', ['needs_deletion', 'needs_enrollment', 'deleted'])
+        .in('sync_status', ['needs_deletion', 'needs_enrollment'])
     , 'fetch enrollment sync jobs');
 
     if (!res || !res.data || res.data.length === 0) return;
@@ -439,22 +459,6 @@ async function syncBiometricEnrollments() {
                     logger.info(`[Biometric Deletion] Deleted member ID ${enrollment.member_id} biometric enrollment record.`);
                 }
             }
-        } else if (enrollment.sync_status === 'deleted') {
-            if (!ZK_SIMULATE && isConnected) {
-                await refreshDeviceUsersCache(true);
-                const stillOnDevice = deviceUsersCache.some(u => parseInt(u.userId, 10) === parseInt(userId, 10));
-                if (stillOnDevice) {
-                    logger.warn(`[!] User ID ${userId} marked as 'deleted' in DB but still exists on device! Retrying deletion...`);
-                    const deleted = await deleteUserFromDevice(userId);
-                    if (!deleted) {
-                        await safeSupabaseCall(() => supabase
-                            .from('biometric_enrollments')
-                            .update({ sync_status: 'needs_deletion' })
-                            .eq('id', enrollment.id)
-                        , 'reset enrollment sync_status to needs_deletion');
-                    }
-                }
-            }
         } else if (enrollment.sync_status === 'needs_enrollment') {
             await refreshDeviceUsersCache(true);
             const isEnrolled = deviceUsersCache.some(u => parseInt(u.userId, 10) === parseInt(userId, 10));
@@ -467,6 +471,36 @@ async function syncBiometricEnrollments() {
 
                 if (updateRes && !updateRes.error) {
                     logger.info(`[Biometric Enrollment] Enrolled User ID ${userId} synced in database.`);
+                }
+            }
+        }
+    }
+}
+
+// Verify deleted mapped mappings in daily loop to avoid constant 30s checks
+async function verifyDeletedEnrollmentsStaleness() {
+    const res = await safeSupabaseCall(() => supabase
+        .from('biometric_enrollments')
+        .select('id, device_user_id, sync_status, member_id')
+        .eq('sync_status', 'deleted')
+    , 'fetch historical deleted enrollments');
+
+    if (!res || !res.data || res.data.length === 0) return;
+
+    if (!ZK_SIMULATE && isConnected) {
+        await refreshDeviceUsersCache(true);
+        for (const enrollment of res.data) {
+            const userId = enrollment.device_user_id;
+            const stillOnDevice = deviceUsersCache.some(u => parseInt(u.userId, 10) === parseInt(userId, 10));
+            if (stillOnDevice) {
+                logger.warn(`[!] User ID ${userId} marked as 'deleted' in DB but still exists on device! Retrying deletion...`);
+                const deleted = await deleteUserFromDevice(userId);
+                if (!deleted) {
+                    await safeSupabaseCall(() => supabase
+                        .from('biometric_enrollments')
+                        .update({ sync_status: 'needs_deletion' })
+                        .eq('id', enrollment.id)
+                    , 'reset enrollment sync_status to needs_deletion');
                 }
             }
         }
@@ -567,6 +601,15 @@ async function handleCheckIn(userId, timestamp) {
     const today = getTodayDate();
     const time = getCurrentTime();
     const parsedUserId = parseInt(userId, 10);
+    const logTimeMs = new Date(timestamp).getTime();
+    const lockKey = `${parsedUserId}-${logTimeMs}`;
+
+    if (currentlyProcessingScans.has(lockKey)) {
+        logger.warn(`[Concurrency Lock] Scan for User ID ${parsedUserId} at ${timestamp} is already being processed. Discarding concurrent request.`);
+        return { success: false, reason: 'already_processing', processed: false };
+    }
+
+    currentlyProcessingScans.add(lockKey);
 
     logger.info(`\n[Scan Detected] Device User ID: ${parsedUserId} at ${timestamp}`);
 
@@ -672,14 +715,16 @@ async function handleCheckIn(userId, timestamp) {
     } catch (err) {
         logger.error('[-] Error handling check-in:', err);
         return { success: false, reason: 'failed', processed: false, message: err.message };
+    } finally {
+        currentlyProcessingScans.delete(lockKey);
     }
 }
 
 // Clean Socket Disconnect
 async function cleanupConnection() {
-    if (scansPollInterval) {
-        clearInterval(scansPollInterval);
-        scansPollInterval = null;
+    if (pollTimeoutId) {
+        clearTimeout(pollTimeoutId);
+        pollTimeoutId = null;
     }
     if (syncTasksInterval) {
         clearInterval(syncTasksInterval);
@@ -742,7 +787,7 @@ async function connectToK40() {
                         const logTime = new Date(log.recordTime).getTime();
                         if (logTime > lastTime) return true;
                         if (logTime === lastTime) {
-                            const id = `${log.deviceUserId}-${new Date(log.recordTime).toISOString()}`;
+                            const id = `${parseInt(log.deviceUserId, 10)}-${logTime}`;
                             return !processedScansAtLastTimestamp.has(id);
                         }
                         return false;
@@ -793,7 +838,15 @@ async function connectToK40() {
         await pollScans();
         await syncDatabaseTasks();
 
-        scansPollInterval = setInterval(pollScans, SCAN_POLL_INTERVAL); // Configurable poll scans
+        const scheduleNextPoll = () => {
+            if (!isConnected) return;
+            pollTimeoutId = setTimeout(async () => {
+                await pollScans();
+                scheduleNextPoll();
+            }, currentScanPollInterval);
+        };
+        
+        scheduleNextPoll();
         syncTasksInterval = setInterval(syncDatabaseTasks, DEVICE_SYNC_INTERVAL); // Configurable sync tasks
 
         // 2. Real-Time Listener (Filtered using local state)
@@ -816,7 +869,7 @@ async function connectToK40() {
                 if (logTime < lastTime) {
                     isDuplicate = true;
                 } else if (logTime === lastTime) {
-                    const id = `${parsedUserId}-${isoTime}`;
+                    const id = `${parsedUserId}-${logTime}`;
                     if (processedScansAtLastTimestamp.has(id)) {
                         isDuplicate = true;
                     }
@@ -874,7 +927,7 @@ async function run() {
         await safeSupabaseCall(() => supabase.rpc('sync_member_statuses'), 'periodic sync_member_statuses');
     }, SYNC_STATUS_INTERVAL);
 
-    // Auto-clean device memory daily (every 24 hours)
+    // Auto-clean device memory daily (every 24 hours) & check for deleted enrollments consistency
     const DAILY_CLEAN_INTERVAL = 24 * 60 * 60 * 1000;
     setInterval(async () => {
         logger.info('[Maintenance] Running daily maintenance (Auto-clean K40 transaction memory)...');
@@ -893,6 +946,14 @@ async function run() {
             }
         } else {
             logger.info('[Maintenance] Simulated check for clearing device logs.');
+        }
+
+        // Run daily check for stale 'deleted' status mappings in Supabase
+        logger.info('[Maintenance] Running daily verification of deleted biometric enrollments...');
+        try {
+            await verifyDeletedEnrollmentsStaleness();
+        } catch (err) {
+            logger.error('[Maintenance Error] Failed to verify deleted enrollments:', err);
         }
     }, DAILY_CLEAN_INTERVAL);
 
@@ -926,7 +987,7 @@ async function run() {
             if (logTime < lastTime) {
                 isDuplicate = true;
             } else if (logTime === lastTime) {
-                const id = `${deviceUserId}-${timestamp}`;
+                const id = `${parseInt(deviceUserId, 10)}-${logTime}`;
                 if (processedScansAtLastTimestamp.has(id)) {
                     isDuplicate = true;
                 }
