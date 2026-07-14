@@ -26,6 +26,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
+migration-data
 # Documentation
 Docs/

@@ -50,7 +50,10 @@ const mapAttendance = (data: any): Attendance => ({
 });
 
 export const getMembers = async (searchQuery: string = '', statusFilter: 'all' | 'active' | 'expired' | 'inactive' | 'archived' = 'all') => {
-    let query = supabase.from('members').select('*').order('created_at', { ascending: false });
+    let query = supabase
+        .from('members')
+        .select('id, full_name, email, phone, gender, date_of_birth, join_date, status, image_url, deleted_at, pending_permanent_deletion')
+        .order('created_at', { ascending: false });
 
     if (statusFilter === 'archived') {
         query = query.not('deleted_at', 'is', null);

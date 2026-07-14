@@ -295,17 +295,10 @@ export const getRevenueData = async () => {
 };
 
 export const getHourlyTrafficData = async () => {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const startDate = thirtyDaysAgo.toISOString().split('T')[0];
-
-    const { data: attendance, error } = await supabase
-        .from('attendance')
-        .select('check_in_time')
-        .gte('date', startDate);
+    const { data, error } = await supabase.rpc('get_hourly_traffic', { p_days_ago: 30 });
 
     if (error) {
-        console.error('Error fetching hourly traffic data:', error);
+        console.error('Error fetching hourly traffic data via RPC:', error);
         return [];
     }
 
@@ -314,11 +307,10 @@ export const getHourlyTrafficData = async () => {
         hourlyCounts[h] = 0;
     }
 
-    attendance?.forEach((item: any) => {
-        if (!item.check_in_time) return;
-        const hour = parseInt(item.check_in_time.split(':')[0], 10);
+    data?.forEach((item: any) => {
+        const hour = item.hour_number;
         if (hour >= 5 && hour <= 22) {
-            hourlyCounts[hour] = (hourlyCounts[hour] || 0) + 1;
+            hourlyCounts[hour] = Number(item.check_in_count);
         }
     });
 
