@@ -449,14 +449,14 @@ async function syncBiometricEnrollments() {
         if (enrollment.sync_status === 'needs_deletion') {
             const deleted = await deleteUserFromDevice(userId);
             if (deleted) {
-                const updateRes = await safeSupabaseCall(() => supabase
+                const deleteRes = await safeSupabaseCall(() => supabase
                     .from('biometric_enrollments')
-                    .update({ sync_status: 'deleted' })
+                    .delete()
                     .eq('id', enrollment.id)
-                , 'update enrollment sync_status to deleted');
+                , 'delete biometric enrollment mapping after hardware deletion');
                 
-                if (updateRes && !updateRes.error) {
-                    logger.info(`[Biometric Deletion] Deleted member ID ${enrollment.member_id} biometric enrollment record.`);
+                if (deleteRes && !deleteRes.error) {
+                    logger.info(`[Biometric Deletion] Released device user ID ${userId} and deleted member ID ${enrollment.member_id} biometric enrollment record.`);
                 }
             }
         } else if (enrollment.sync_status === 'needs_enrollment') {
@@ -487,22 +487,36 @@ async function verifyDeletedEnrollmentsStaleness() {
 
     if (!res || !res.data || res.data.length === 0) return;
 
-    if (!ZK_SIMULATE && isConnected) {
-        await refreshDeviceUsersCache(true);
-        for (const enrollment of res.data) {
-            const userId = enrollment.device_user_id;
-            const stillOnDevice = deviceUsersCache.some(u => parseInt(u.userId, 10) === parseInt(userId, 10));
+    for (const enrollment of res.data) {
+        const userId = enrollment.device_user_id;
+        let stillOnDevice = false;
+
+        if (!ZK_SIMULATE && isConnected) {
+            await refreshDeviceUsersCache(true);
+            stillOnDevice = deviceUsersCache.some(u => parseInt(u.userId, 10) === parseInt(userId, 10));
             if (stillOnDevice) {
                 logger.warn(`[!] User ID ${userId} marked as 'deleted' in DB but still exists on device! Retrying deletion...`);
                 const deleted = await deleteUserFromDevice(userId);
-                if (!deleted) {
+                if (deleted) {
+                    stillOnDevice = false;
+                } else {
                     await safeSupabaseCall(() => supabase
                         .from('biometric_enrollments')
                         .update({ sync_status: 'needs_deletion' })
                         .eq('id', enrollment.id)
                     , 'reset enrollment sync_status to needs_deletion');
+                    continue;
                 }
             }
+        }
+
+        if (!stillOnDevice) {
+            logger.info(`[Biometric Cleanup] User ID ${userId} is confirmed deleted from device. Removing legacy enrollment record to release mapping.`);
+            await safeSupabaseCall(() => supabase
+                .from('biometric_enrollments')
+                .delete()
+                .eq('id', enrollment.id)
+            , 'clean up legacy deleted enrollment record');
         }
     }
 }
