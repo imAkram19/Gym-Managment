@@ -75,18 +75,35 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, isSidebarCollapsed,
 
     // Sync-agent writes last_ping every 5 minutes.
     // Use 10-minute threshold (2 missed heartbeats) to avoid false positives.
-    // Primary signal is d.status === 'offline' set immediately on K40 disconnect.
     const OFFLINE_STALE_THRESHOLD_MS = 10 * 60 * 1000;
 
-    const offlineDevices = devices.filter(d => {
+    // Deduplicate device list by (name, ipAddress, port), preferring the latest lastPing / online status
+    const uniqueDevicesMap = new Map<string, BiometricDevice>();
+    for (const d of devices) {
+        const key = `${d.name}-${d.ipAddress}-${d.port}`;
+        const existing = uniqueDevicesMap.get(key);
+        if (!existing) {
+            uniqueDevicesMap.set(key, d);
+        } else {
+            const existingTime = existing.lastPing ? new Date(existing.lastPing).getTime() : 0;
+            const newTime = d.lastPing ? new Date(d.lastPing).getTime() : 0;
+            if (d.status === 'online' && existing.status !== 'online') {
+                uniqueDevicesMap.set(key, d);
+            } else if (newTime > existingTime) {
+                uniqueDevicesMap.set(key, d);
+            }
+        }
+    }
+    const uniqueDevices = Array.from(uniqueDevicesMap.values());
+
+    const offlineDevices = uniqueDevices.filter(d => {
         if (d.status === 'offline') return true;
         if (!d.lastPing) return true;
         return Date.now() - new Date(d.lastPing).getTime() > OFFLINE_STALE_THRESHOLD_MS;
     });
 
-
-    // Pick the primary device to show in status pill (first device)
-    const primaryDevice = devices[0] ?? null;
+    // Pick the primary device to show in status pill (prefer online or first deduplicated device)
+    const primaryDevice = uniqueDevices.find(d => !offlineDevices.some(o => o.id === d.id)) ?? uniqueDevices[0] ?? null;
     const primaryIsOffline = primaryDevice
         ? offlineDevices.some(d => d.id === primaryDevice.id)
         : false;

@@ -90,6 +90,25 @@ if (!wasClean) {
     logger.info(`[Startup] Sync Agent started normally after clean shutdown.`);
 }
 
+// Helper: Validate if a timestamp is in the future
+function isFutureTimestamp(isoString) {
+    if (!isoString) return false;
+    const logTime = new Date(isoString).getTime();
+    if (isNaN(logTime)) return true;
+    return logTime > Date.now() + 60 * 1000; // >1 minute in future
+}
+
+// Helper: Clean up node-zklib socket listeners to prevent memory growth
+function cleanupZkSocketListeners() {
+    try {
+        if (zkInstance && zkInstance.zklibTcp && zkInstance.zklibTcp.socket) {
+            zkInstance.zklibTcp.socket.removeAllListeners('data');
+        }
+    } catch (e) {
+        // ignore
+    }
+}
+
 // 1. Local State Persistence (Priority order initialization)
 function saveState() {
     try {
@@ -107,6 +126,13 @@ function loadState() {
     try {
         if (fs.existsSync(STATE_FILE_PATH)) {
             const data = JSON.parse(fs.readFileSync(STATE_FILE_PATH, 'utf8'));
+            if (data.lastProcessedTimestamp && isFutureTimestamp(data.lastProcessedTimestamp)) {
+                logger.warn(`[State Guard] Corrupted future timestamp detected in state.json: ${data.lastProcessedTimestamp}. Resetting state to current time.`);
+                lastProcessedTimestamp = new Date().toISOString();
+                processedScansAtLastTimestamp = new Set();
+                saveState();
+                return true;
+            }
             lastProcessedTimestamp = data.lastProcessedTimestamp;
             processedScansAtLastTimestamp = new Set(data.processedScansAtLastTimestamp || []);
             logger.info(`[State] Loaded state from local file. Last processed timestamp: ${lastProcessedTimestamp}`);
@@ -132,7 +158,7 @@ async function initializeState() {
         .maybeSingle()
     , 'fetch latest scan log for state initialization');
 
-    if (res && res.data) {
+    if (res && res.data && !isFutureTimestamp(res.data.scan_timestamp)) {
         lastProcessedTimestamp = res.data.scan_timestamp;
         processedScansAtLastTimestamp.clear();
         processedScansAtLastTimestamp.add(`${res.data.device_user_id}-${res.data.scan_timestamp}`);
@@ -143,7 +169,7 @@ async function initializeState() {
 
     // Priority 3: Query latest K40 attendance log
     if (!ZK_SIMULATE) {
-        logger.info('[State] No attendance records found in Supabase. Priority 3: Querying latest log from physical K40 device...');
+        logger.info('[State] No valid attendance records found in Supabase. Priority 3: Querying latest log from physical K40 device...');
         try {
             const tempZk = new ZKLib(DEVICE_IP, DEVICE_PORT, 10000, 4000);
             await tempZk.createSocket();
@@ -151,16 +177,19 @@ async function initializeState() {
             await tempZk.disconnect();
             
             if (attendances && attendances.data && attendances.data.length > 0) {
-                const sorted = attendances.data.sort((a, b) => 
-                    new Date(b.recordTime).getTime() - new Date(a.recordTime).getTime()
-                );
-                const latest = sorted[0];
-                lastProcessedTimestamp = new Date(latest.recordTime).toISOString();
-                processedScansAtLastTimestamp.clear();
-                processedScansAtLastTimestamp.add(`${latest.deviceUserId}-${lastProcessedTimestamp}`);
-                saveState();
-                logger.info(`[State] State successfully initialized from K40 device logs: ${lastProcessedTimestamp}`);
-                return;
+                const validLogs = attendances.data.filter(l => !isFutureTimestamp(l.recordTime));
+                if (validLogs.length > 0) {
+                    const sorted = validLogs.sort((a, b) => 
+                        new Date(b.recordTime).getTime() - new Date(a.recordTime).getTime()
+                    );
+                    const latest = sorted[0];
+                    lastProcessedTimestamp = new Date(latest.recordTime).toISOString();
+                    processedScansAtLastTimestamp.clear();
+                    processedScansAtLastTimestamp.add(`${latest.deviceUserId}-${lastProcessedTimestamp}`);
+                    saveState();
+                    logger.info(`[State] State successfully initialized from K40 device logs: ${lastProcessedTimestamp}`);
+                    return;
+                }
             }
         } catch (e) {
             logger.warn(`[State Warning] Could not connect to K40 device during state initialization: ${e.message}`);
@@ -171,10 +200,14 @@ async function initializeState() {
     lastProcessedTimestamp = new Date().toISOString();
     processedScansAtLastTimestamp.clear();
     saveState();
-    logger.info(`[State] No state found anywhere. Priority 4: Initialized state with current time: ${lastProcessedTimestamp}`);
+    logger.info(`[State] No valid prior state found. Priority 4: Initialized state with current time: ${lastProcessedTimestamp}`);
 }
 
 function markScanAsProcessed(deviceUserId, isoTime) {
+    if (isFutureTimestamp(isoTime)) {
+        logger.warn(`[State Guard] Ignored future timestamp in markScanAsProcessed: ${isoTime}`);
+        return;
+    }
     const logTime = new Date(isoTime).getTime();
     const lastTime = lastProcessedTimestamp ? new Date(lastProcessedTimestamp).getTime() : 0;
     
@@ -497,13 +530,18 @@ async function processPendingDeviceDeletions() {
     }
 }
 
-// Self-register device and handle pings
+// Self-register device and handle pings (Idempotent Implementation)
 async function initDeviceConnection() {
+    const deviceName = ZK_SIMULATE ? 'Simulated Dev ZKTeco K40' : (process.env.ZK_DEVICE_NAME || 'Iron Gym K40');
+
+    // Idempotent search: query by name & IP with limit(1) to avoid PGRST116 multiple rows error
     const res = await safeSupabaseCall(() => supabase
         .from('biometric_devices')
         .select('*')
+        .eq('name', deviceName)
         .eq('ip_address', DEVICE_IP)
-        .maybeSingle()
+        .order('created_at', { ascending: true })
+        .limit(1)
     , 'fetch device details');
 
     if (!res) {
@@ -511,11 +549,10 @@ async function initDeviceConnection() {
         return;
     }
 
-    if (res.data) {
-        dbDevice = res.data;
+    if (res.data && res.data.length > 0) {
+        dbDevice = res.data[0];
         logger.info(`[+] Registered device found in DB: "${dbDevice.name}" (ID: ${dbDevice.id})`);
     } else {
-        const deviceName = ZK_SIMULATE ? 'Simulated Dev ZKTeco K40' : 'Iron Gym K40';
         const createRes = await safeSupabaseCall(() => supabase
             .from('biometric_devices')
             .insert([{
@@ -720,14 +757,13 @@ async function connectToK40() {
 
         // Initialize cache
         await refreshDeviceUsersCache(true);
-        logger.info(`[K40 Event] Loaded device cache: ${deviceUsersCache.length} users enrolled.`);
-
-        // 1. Transaction Memory Polling Fallback (Filtered locally using persistent state)
+        logger.info(`[K40 Event] Loaded device cache: ${deviceUsersCache.length} users enrolled.`);        // 1. Transaction Memory Polling Fallback (Filtered locally using persistent state)
         const pollScans = async () => {
             if (!isConnected) return;
             isSyncing = true;
             try {
                 const attendances = await zkInstance.getAttendances();
+                cleanupZkSocketListeners();
                 consecutivePollFailures = 0;
 
                 if (attendances && attendances.data) {
@@ -739,6 +775,7 @@ async function connectToK40() {
                     // Filter logs using local state
                     const lastTime = lastProcessedTimestamp ? new Date(lastProcessedTimestamp).getTime() : 0;
                     const newLogs = sortedLogs.filter(log => {
+                        if (isFutureTimestamp(log.recordTime)) return false;
                         const logTime = new Date(log.recordTime).getTime();
                         if (logTime > lastTime) return true;
                         if (logTime === lastTime) {
