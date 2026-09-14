@@ -580,7 +580,11 @@ async function processPendingDeviceDeletions() {
 
 // Self-register device and handle pings (Idempotent Implementation)
 async function initDeviceConnection() {
-    const deviceName = ZK_SIMULATE ? 'Simulated Dev ZKTeco K40' : (process.env.ZK_DEVICE_NAME || 'Iron Gym K40');
+    const rawDeviceName = process.env.ZK_DEVICE_NAME || 'Iron Gym K40';
+    // Legacy Name Guard: Automatically sanitize obsolete "Iron Gym K40 Pro" to production "Iron Gym K40"
+    const deviceName = ZK_SIMULATE 
+        ? 'Simulated Dev ZKTeco K40' 
+        : (rawDeviceName === 'Iron Gym K40 Pro' ? 'Iron Gym K40' : rawDeviceName);
 
     // Idempotent search: query by name & IP with limit(1) to avoid PGRST116 multiple rows error
     const res = await safeSupabaseCall(() => supabase
