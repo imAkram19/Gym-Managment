@@ -174,9 +174,20 @@ export const getBiometricAttendanceLogs = async (limit = 100): Promise<Biometric
     if (error) throw error;
 
     // We also need to map the device_user_id to members if possible.
-    // To avoid complex client-side joins, we can query enrollments and resolve names.
-    const enrollments = await getBiometricEnrollments();
-    const enrollmentMap = new Map(enrollments.map(e => [e.deviceUserId, e.memberName]));
+    // Query only the mapping of device_user_id to member name to avoid downloading all enrollment columns.
+    const { data: enrollData } = await supabase
+        .from('biometric_enrollments')
+        .select(`
+            device_user_id,
+            members!inner (
+                full_name
+            )
+        `)
+        .is('members.deleted_at', null);
+
+    const enrollmentMap = new Map(
+        (enrollData || []).map((e: any) => [e.device_user_id, e.members?.full_name || 'Unknown'])
+    );
 
     return (data || []).map((log: any) => ({
         id: log.id,

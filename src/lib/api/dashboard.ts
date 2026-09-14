@@ -66,12 +66,11 @@ export const getDashboardStats = async () => {
 
     // 4. Financial Calculations
     // A. Total Collections (All-time)
-    const { data: allPayments, error: allPaymentsError } = await supabase
-        .from('payments')
-        .select('amount');
+    const { data: totalCollectionsData, error: allPaymentsError } = await supabase
+        .rpc('get_total_collections');
 
     if (allPaymentsError) console.error('Error fetching all-time payments:', allPaymentsError);
-    const totalCollections = allPayments?.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) || 0;
+    const totalCollections = Number(totalCollectionsData) || 0;
 
     // B. Monthly Financial Breakdown
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
@@ -296,17 +295,10 @@ export const getRevenueData = async () => {
 };
 
 export const getHourlyTrafficData = async () => {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const startDate = thirtyDaysAgo.toISOString().split('T')[0];
-
-    const { data: attendance, error } = await supabase
-        .from('attendance')
-        .select('check_in_time')
-        .gte('date', startDate);
+    const { data, error } = await supabase.rpc('get_hourly_traffic', { p_days_ago: 30 });
 
     if (error) {
-        console.error('Error fetching hourly traffic data:', error);
+        console.error('Error fetching hourly traffic data via RPC:', error);
         return [];
     }
 
@@ -315,11 +307,10 @@ export const getHourlyTrafficData = async () => {
         hourlyCounts[h] = 0;
     }
 
-    attendance?.forEach((item: any) => {
-        if (!item.check_in_time) return;
-        const hour = parseInt(item.check_in_time.split(':')[0], 10);
+    data?.forEach((item: any) => {
+        const hour = item.hour_number;
         if (hour >= 5 && hour <= 22) {
-            hourlyCounts[hour] = (hourlyCounts[hour] || 0) + 1;
+            hourlyCounts[hour] = Number(item.check_in_count);
         }
     });
 
@@ -354,54 +345,22 @@ export const getRawTrafficData = async (days: number = 30) => {
 
 
 export const getInactiveMembers = async () => {
-    const { data: inactiveCandidates, error } = await supabase
-        .from('members')
-        .select(`
-            id,
-            full_name,
-            phone,
-            join_date,
-            status,
-            deleted_at,
-            attendance (
-                date
-            )
-        `)
-        .eq('status', 'active')
-        .is('deleted_at', null);
+    const { data, error } = await supabase
+        .from('view_inactive_members')
+        .select('*');
 
     if (error) {
         console.error('Error fetching inactive members:', error);
         return [];
     }
 
-    const tenDaysAgoTime = new Date().getTime() - (10 * 24 * 60 * 60 * 1000);
-
-    const inactiveMembers = (inactiveCandidates || [])
-        .map((m: any) => {
-            const lastCheckIn = m.attendance && m.attendance.length > 0
-                ? m.attendance.reduce((latest: string, current: any) => 
-                    new Date(current.date) > new Date(latest) ? current.date : latest, '1970-01-01')
-                : null;
-            return {
-                id: m.id,
-                name: m.full_name,
-                phone: m.phone || '',
-                joinDate: m.join_date,
-                lastCheckIn: lastCheckIn === '1970-01-01' ? null : lastCheckIn
-            };
-        })
-        .filter((m: any) => {
-            if (!m.lastCheckIn) {
-                const joinDateTime = new Date(m.joinDate).getTime();
-                return joinDateTime < tenDaysAgoTime;
-            } else {
-                const lastCheckInTime = new Date(m.lastCheckIn).getTime();
-                return lastCheckInTime < tenDaysAgoTime;
-            }
-        });
-
-    return inactiveMembers;
+    return (data || []).map((m: any) => ({
+        id: m.id,
+        name: m.name,
+        phone: m.phone || '',
+        joinDate: m.joinDate,
+        lastCheckIn: m.lastCheckIn
+    }));
 };
 
 
