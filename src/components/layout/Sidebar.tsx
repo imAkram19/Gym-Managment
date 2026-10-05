@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import {
     LayoutDashboard,
     Users,
-    CreditCard,
+    Trophy,
     CalendarCheck,
     X,
     Dumbbell,
@@ -23,7 +23,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, 
     const navItems = [
         { label: 'Dashboard', path: '/', icon: LayoutDashboard },
         { label: 'Members', path: '/members', icon: Users },
-        { label: 'Subscriptions', path: '/subscriptions', icon: CreditCard },
+        { label: 'Leaderboard', path: '/leaderboard', icon: Trophy },
         { label: 'Attendance', path: '/attendance', icon: CalendarCheck },
         { label: 'Biometrics', path: '/biometrics', icon: Fingerprint },
     ];

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, AlertTriangle, Trash2, Archive } from 'lucide-react';
 import { archiveMember, permanentlyDeleteMemberImmediately } from '../../lib/api/members';
+import { notify } from '../../lib/toast';
 import type { Member, BiometricEnrollment } from '../../types';
 
 interface DeleteMemberModalProps {
@@ -25,6 +26,23 @@ export const DeleteMemberModal: React.FC<DeleteMemberModalProps> = ({
     const [confirmText, setConfirmText] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
+    // Escape key listener & body scroll lock
+    React.useEffect(() => {
+        if (!isOpen) return;
+        document.body.style.overflow = 'hidden';
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && !loading) {
+                e.preventDefault();
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.body.style.overflow = '';
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [isOpen, loading, onClose]);
 
     if (!isOpen) return null;
 
@@ -54,18 +72,19 @@ export const DeleteMemberModal: React.FC<DeleteMemberModalProps> = ({
         try {
             if (deleteType === 'archive') {
                 await archiveMember(member.id, enrollment?.id);
-                alert('Member archived successfully.');
+                notify.memberDeleted(member.fullName);
             } else {
                 // Permanently delete member from database immediately.
                 // Cascading foreign keys will delete subscriptions, payments, attendance, biometrics.
                 // The delete trigger on biometrics enrollment will handle log deletion and hardware queueing.
                 await permanentlyDeleteMemberImmediately(member.id);
-                alert('Member permanently deleted successfully.');
+                notify.memberDeleted(member.fullName);
             }
             onSuccess();
         } catch (err: any) {
             console.error('Failed to perform member action:', err);
             setError(err.message || 'Action failed.');
+            notify.error(err.message || 'Action failed.');
         } finally {
             setLoading(false);
         }
@@ -80,7 +99,11 @@ export const DeleteMemberModal: React.FC<DeleteMemberModalProps> = ({
                         <Trash2 className="w-5 h-5 text-red-600" />
                         Delete Member
                     </h2>
-                    <button onClick={onClose} className="p-1.5 hover:bg-gray-200 rounded-full transition-colors text-gray-500 hover:text-gray-700">
+                    <button
+                        onClick={onClose}
+                        className="p-1.5 hover:bg-gray-200 rounded-full transition-colors text-gray-500 hover:text-gray-700"
+                        aria-label="Close modal"
+                    >
                         <X className="w-5 h-5" />
                     </button>
                 </div>

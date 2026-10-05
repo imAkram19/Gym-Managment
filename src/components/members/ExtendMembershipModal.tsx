@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Save, Calendar } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { notify } from '../../lib/toast';
 
 interface ExtendMembershipModalProps {
     isOpen: boolean;
@@ -21,6 +22,23 @@ export const ExtendMembershipModal: React.FC<ExtendMembershipModalProps> = ({
     const [error, setError] = useState('');
     const [extendType, setExtendType] = useState('1'); // months or 'custom'
     const [customEndDate, setCustomEndDate] = useState('');
+
+    // Escape key listener & body scroll lock
+    React.useEffect(() => {
+        if (!isOpen) return;
+        document.body.style.overflow = 'hidden';
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.body.style.overflow = '';
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [isOpen, onClose]);
 
     if (!isOpen) return null;
 
@@ -62,11 +80,13 @@ export const ExtendMembershipModal: React.FC<ExtendMembershipModalProps> = ({
             const { error: syncError } = await supabase.rpc('sync_member_statuses');
             if (syncError) console.error('Failed to sync member statuses:', syncError);
 
+            notify.subRenewed('Member', `Extended to ${finalEndDateStr}`);
             onSuccess();
             onClose();
         } catch (err: any) {
             console.error(err);
             setError(err.message || 'Failed to extend membership');
+            notify.error(err.message || 'Failed to extend membership');
         } finally {
             setLoading(false);
         }
@@ -77,7 +97,11 @@ export const ExtendMembershipModal: React.FC<ExtendMembershipModalProps> = ({
             <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
                 <div className="flex justify-between items-center p-6 border-b border-gray-100">
                     <h2 className="text-xl font-bold text-gray-900">Extend Membership</h2>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
+                    <button
+                        onClick={onClose}
+                        className="p-2 hover:bg-gray-100 rounded-full"
+                        aria-label="Close modal"
+                    >
                         <X className="w-5 h-5 text-gray-500" />
                     </button>
                 </div>

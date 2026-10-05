@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Save, Receipt } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { notify } from '../../lib/toast';
 
 interface AddSubscriptionModalProps {
     isOpen: boolean;
@@ -21,6 +22,23 @@ export const AddSubscriptionModal: React.FC<AddSubscriptionModalProps> = ({ isOp
         paymentMethod: 'cash',
         adminNote: ''
     });
+
+    // Escape key listener & body scroll lock
+    React.useEffect(() => {
+        if (!isOpen) return;
+        document.body.style.overflow = 'hidden';
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.body.style.overflow = '';
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [isOpen, onClose]);
 
     if (!isOpen) return null;
 
@@ -75,11 +93,13 @@ export const AddSubscriptionModal: React.FC<AddSubscriptionModalProps> = ({ isOp
 
             if (memberError) throw memberError;
 
+            notify.subRenewed('Member', formData.planName);
             onSuccess();
             onClose();
         } catch (err: any) {
             console.error(err);
             setError(err.message || 'Failed to add subscription');
+            notify.error(err.message || 'Failed to add subscription');
         } finally {
             setLoading(false);
         }
@@ -90,7 +110,11 @@ export const AddSubscriptionModal: React.FC<AddSubscriptionModalProps> = ({ isOp
             <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
                 <div className="flex justify-between items-center p-6 border-b border-gray-100">
                     <h2 className="text-xl font-bold text-gray-900">Renew Subscription</h2>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
+                    <button
+                        onClick={onClose}
+                        className="p-2 hover:bg-gray-100 rounded-full"
+                        aria-label="Close modal"
+                    >
                         <X className="w-5 h-5 text-gray-500" />
                     </button>
                 </div>

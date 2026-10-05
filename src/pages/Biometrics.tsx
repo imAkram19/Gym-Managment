@@ -1,880 +1,325 @@
 import React, { useEffect, useState } from 'react';
-import { 
-    Fingerprint, 
-    Cpu, 
-    History, 
-    Plus, 
-    Trash2, 
-    RefreshCw, 
-    CheckCircle, 
-    XCircle, 
-    AlertTriangle,
-    Search,
-    Link,
-    Unlink
-} from 'lucide-react';
-import { 
-    getBiometricDevices, 
-    createBiometricDevice, 
-    deleteBiometricDevice,
-    getBiometricEnrollments,
-    enrollMemberBiometrics,
-    deleteBiometricEnrollment,
-    getBiometricAttendanceLogs,
-    syncMemberStatuses
+import { Plus, X, Loader2 } from 'lucide-react';
+import { DeviceStatusPanel } from '../components/biometrics/DeviceStatusPanel';
+import { EnrollmentGrid } from '../components/biometrics/EnrollmentGrid';
+import { ScanSimulator } from '../components/biometrics/ScanSimulator';
+import { CheckInFeedback, type CheckInFeedbackData } from '../components/biometrics/CheckInFeedback';
+import { FilterChips } from '../components/ui/FilterChips';
+import {
+  getBiometricDevices,
+  createBiometricDevice,
+  deleteBiometricDevice,
+  getBiometricEnrollments,
+  deleteBiometricEnrollment,
 } from '../lib/api/biometrics';
 import type {
-    BiometricEnrollmentWithMember,
-    BiometricAttendanceLogWithDevice
+  BiometricEnrollmentWithMember,
 } from '../lib/api/biometrics';
-import { getMembers } from '../lib/api/members';
-import { getSubscriptions } from '../lib/api/subscriptions';
-import type { BiometricDevice, Member } from '../types';
-import { clsx } from 'clsx';
 import { supabase } from '../lib/supabase';
+import { notify } from '../lib/toast';
+import type { BiometricDevice } from '../types';
 
 const Biometrics: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'devices' | 'enrollments' | 'logs'>('devices');
-    const [enrollmentFilter, setEnrollmentFilter] = useState<'all' | 'active' | 'expired' | 'needs_enrollment' | 'needs_deletion'>('all');
-    const [loading, setLoading] = useState(false);
-    const [errorMsg, setErrorMsg] = useState('');
-    const [successMsg, setSuccessMsg] = useState('');
+  const [activeTab, setActiveTab] = useState<'overview' | 'enrollments' | 'simulator'>('overview');
+  const [devices, setDevices] = useState<BiometricDevice[]>([]);
+  const [enrollments, setEnrollments] = useState<BiometricEnrollmentWithMember[]>([]);
+  const [todayScansCount, setTodayScansCount] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-    // Devices State
-    const [devices, setDevices] = useState<BiometricDevice[]>([]);
-    const [showAddDevice, setShowAddDevice] = useState(false);
-    const [deviceName, setDeviceName] = useState('');
-    const [deviceIp, setDeviceIp] = useState('192.168.1.201');
-    const [devicePort, setDevicePort] = useState(4370);
+  // Add Device Modal
+  const [showAddDevice, setShowAddDevice] = useState(false);
+  const [newDeviceName, setNewDeviceName] = useState('ZKTeco K40');
+  const [newDeviceIp, setNewDeviceIp] = useState('192.168.1.201');
+  const [newDevicePort, setNewDevicePort] = useState(4370);
+  const [addDeviceLoading, setAddDeviceLoading] = useState(false);
 
-    // Enrollments & Subscriptions State
-    const [enrollments, setEnrollments] = useState<BiometricEnrollmentWithMember[]>([]);
-    const [members, setMembers] = useState<Member[]>([]);
-    const [subscriptions, setSubscriptions] = useState<any[]>([]);
-    const [selectedMemberId, setSelectedMemberId] = useState('');
-    const [deviceUserIdInput, setDeviceUserIdInput] = useState('');
-    const [searchQuery, setSearchQuery] = useState('');
+  // Feedback banner state
+  const [feedbackData, setFeedbackData] = useState<CheckInFeedbackData>(null);
 
-    // Logs State
-    const [logs, setLogs] = useState<BiometricAttendanceLogWithDevice[]>([]);
-    const [todaysScansCount, setTodaysScansCount] = useState(0);
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [deviceData, enrollData] = await Promise.all([
+        getBiometricDevices(),
+        getBiometricEnrollments(),
+      ]);
 
-    useEffect(() => {
-        loadData();
-    }, []);
+      setDevices(deviceData);
+      setEnrollments(enrollData);
 
-    const loadData = async () => {
-        setLoading(true);
-        setErrorMsg('');
-        try {
-            const [deviceData, enrollData, memberData, subData, logData] = await Promise.all([
-                getBiometricDevices(),
-                getBiometricEnrollments(),
-                getMembers(),
-                getSubscriptions(),
-                getBiometricAttendanceLogs()
-            ]);
+      // Today's scans count
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const { count } = await supabase
+        .from('biometric_attendance_logs')
+        .select('*', { count: 'exact', head: true })
+        .gte('scan_timestamp', todayStart.toISOString());
 
-            setDevices(deviceData);
-            setEnrollments(enrollData);
-            setMembers(memberData);
-            setSubscriptions(subData);
-            setLogs(logData);
+      setTodayScansCount(count || 0);
+    } catch (err) {
+      console.error('Failed to load biometrics overview:', err);
+      notify.error('Failed to load biometrics data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-            // Fetch today's scans count
-            const todayStart = new Date();
-            todayStart.setHours(0, 0, 0, 0);
-            const { count, error: scansError } = await supabase
-                .from('biometric_attendance_logs')
-                .select('*', { count: 'exact', head: true })
-                .gte('scan_timestamp', todayStart.toISOString());
+  useEffect(() => {
+    loadData();
+  }, []);
 
-            if (!scansError && count !== null) {
-                setTodaysScansCount(count);
-            } else {
-                const todayStr = new Date().toISOString().split('T')[0];
-                const localCount = logData.filter(log => log.scanTimestamp.startsWith(todayStr)).length;
-                setTodaysScansCount(localCount);
-            }
-        } catch (err: any) {
-            setErrorMsg(err.message || 'Failed to load biometrics data.');
-        } finally {
-            setLoading(false);
-        }
-    };
+  const handleRefreshPing = async () => {
+    setIsRefreshing(true);
+    notify.deviceSyncing();
+    try {
+      await loadData();
+      notify.deviceOnline();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
-    const handleAddDevice = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!deviceName || !deviceIp) return;
-        setErrorMsg('');
-        setSuccessMsg('');
-        try {
-            await createBiometricDevice(deviceName, deviceIp, devicePort);
-            setSuccessMsg('Biometric device registered successfully!');
-            setDeviceName('');
-            setShowAddDevice(false);
-            loadData();
-        } catch (err: any) {
-            setErrorMsg(err.message || 'Failed to register device.');
-        }
-    };
+  const handleAddDevice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddDeviceLoading(true);
+    try {
+      await createBiometricDevice(newDeviceName, newDeviceIp, Number(newDevicePort));
+      notify.update('device-add', 'success', 'Biometric device added successfully');
+      setShowAddDevice(false);
+      await loadData();
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to add device');
+    } finally {
+      setAddDeviceLoading(false);
+    }
+  };
 
-    const handleDeleteDevice = async (id: string) => {
-        if (!confirm('Are you sure you want to remove this device?')) return;
-        setErrorMsg('');
-        setSuccessMsg('');
-        try {
-            await deleteBiometricDevice(id);
-            setSuccessMsg('Device removed successfully.');
-            loadData();
-        } catch (err: any) {
-            setErrorMsg(err.message || 'Failed to delete device.');
-        }
-    };
+  const handleDeleteDevice = async (deviceId: string) => {
+    try {
+      await deleteBiometricDevice(deviceId);
+      notify.update('device-del', 'success', 'Device removed from gateway');
+      await loadData();
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to delete device');
+    }
+  };
 
-    const handleMapFingerprint = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!selectedMemberId || !deviceUserIdInput) return;
-        
-        setErrorMsg('');
-        setSuccessMsg('');
-        
-        // 1. Validation: Numeric check
-        const numericId = parseInt(deviceUserIdInput, 10);
-        if (isNaN(numericId) || !/^\d+$/.test(deviceUserIdInput)) {
-            setErrorMsg('Device User ID must be numeric.');
-            return;
-        }
-        
-        // 2. Validation: Duplicate mapping check for active members
-        const duplicate = enrollments.find(e => 
-            e.deviceUserId === numericId && 
-            e.memberId !== selectedMemberId &&
-            e.memberStatus === 'active'
-        );
-        if (duplicate) {
-            setErrorMsg(`Device User ID ${numericId} is already mapped to active member "${duplicate.memberName}".`);
-            return;
-        }
-        
-        try {
-            setLoading(true);
-            await enrollMemberBiometrics(selectedMemberId, numericId);
-            setSuccessMsg('Fingerprint mapped successfully!');
-            setSelectedMemberId('');
-            setDeviceUserIdInput('');
-            loadData();
-        } catch (err: any) {
-            setErrorMsg(err.message || 'Failed to map fingerprint.');
-        } finally {
-            setLoading(false);
-        }
-    };
+  const handleDeleteEnrollment = async (enrollmentId: string, memberName: string) => {
+    try {
+      await deleteBiometricEnrollment(enrollmentId);
+      notify.memberUpdated(memberName);
+      await loadData();
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to delete enrollment');
+    }
+  };
 
-    const handleUnlink = async (id: string) => {
-        if (!confirm('Are you sure you want to remove this fingerprint mapping?')) return;
-        setErrorMsg('');
-        setSuccessMsg('');
-        try {
-            await deleteBiometricEnrollment(id);
-            setSuccessMsg('Enrollment unlinked successfully.');
-            loadData();
-        } catch (err: any) {
-            setErrorMsg(err.message || 'Failed to remove enrollment.');
-        }
-    };
-
-    const handleSyncStatuses = async () => {
-        setLoading(true);
-        setErrorMsg('');
-        setSuccessMsg('');
-        try {
-            await syncMemberStatuses();
-            setSuccessMsg('Membership & subscription expiry synchronized successfully!');
-            loadData();
-        } catch (err: any) {
-            setErrorMsg(err.message || 'Sync failed.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-
-
-    const getDaysRemainingForMember = (memberId: string) => {
-        const activeSub = subscriptions.find(s => s.memberId === memberId && s.isActive);
-        if (activeSub) {
-            return { days: activeSub.remainingDays, label: `${activeSub.remainingDays} days` };
-        }
-        const anySub = subscriptions.find(s => s.memberId === memberId);
-        if (anySub) {
-            if (anySub.remainingDays < 0) {
-                return { days: anySub.remainingDays, label: 'Expired' };
-            }
-            return { days: anySub.remainingDays, label: `${anySub.remainingDays} days` };
-        }
-        return { days: 0, label: 'N/A' };
-    };
-
-
-
-    // Filtered enrollments for search & quick filters
-    const filteredEnrollments = enrollments.filter(e => {
-        const matchesSearch = e.memberName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            e.deviceUserId.toString().includes(searchQuery);
-        if (!matchesSearch) return false;
-
-        if (enrollmentFilter === 'active') return e.memberStatus === 'active';
-        if (enrollmentFilter === 'expired') return e.memberStatus === 'expired';
-        if (enrollmentFilter === 'needs_enrollment') return e.syncStatus === 'needs_enrollment';
-        if (enrollmentFilter === 'needs_deletion') return e.syncStatus === 'needs_deletion';
-
-        return true;
+  const handleScanSimulated = (result: {
+    type: 'success' | 'denied';
+    memberName: string;
+    memberId?: string;
+    reason?: string;
+  }) => {
+    const time = new Date().toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
     });
+    if (result.type === 'success') {
+      setFeedbackData({
+        type: 'success',
+        memberName: result.memberName,
+        memberId: result.memberId || '',
+        time,
+      });
+    } else {
+      setFeedbackData({
+        type: 'denied',
+        memberName: result.memberName,
+        memberId: result.memberId,
+        reason: result.reason || 'Verification failed',
+        time,
+      });
+    }
+  };
 
-    const onlineDevicesCount = devices.filter(d => d.status === 'online').length;
-    const pendingActionsCount = enrollments.filter(e => e.syncStatus === 'needs_deletion' || e.syncStatus === 'needs_enrollment').length;
+  return (
+    <div className="space-y-6">
+      {/* ── FEEDBACK SCAN BANNER ── */}
+      <CheckInFeedback
+        data={feedbackData}
+        onDismiss={() => setFeedbackData(null)}
+      />
 
-    return (
-        <div className="space-y-6">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                        <Fingerprint className="w-8 h-8 text-indigo-600 animate-pulse" />
-                        Biometrics & Sync Management
-                    </h1>
-                    <p className="text-gray-500 mt-1">Manage ZKTeco K40 hardware, fingerprint enrollments, and check-in logs.</p>
-                </div>
-                <div className="flex gap-2">
-
-                    <button
-                        onClick={handleSyncStatuses}
-                        disabled={loading}
-                        className="px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 flex items-center gap-2 text-sm font-medium shadow-sm transition-colors cursor-pointer"
-                    >
-                        <RefreshCw className={clsx("w-4 h-4", loading && "animate-spin")} />
-                        Sync Expired Members
-                    </button>
-                    <button
-                        onClick={loadData}
-                        disabled={loading}
-                        className="px-3 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 shadow-sm cursor-pointer"
-                        title="Reload Data"
-                    >
-                        <RefreshCw className={clsx("w-4 h-4", loading && "animate-spin")} />
-                    </button>
-                </div>
-            </div>
-
-            {/* Error / Success Banners */}
-            {errorMsg && (
-                <div className="p-4 bg-red-50 text-red-800 rounded-lg flex items-center gap-3 border border-red-200">
-                    <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-                    <span className="text-sm font-medium">{errorMsg}</span>
-                </div>
-            )}
-            {successMsg && (
-                <div className="p-4 bg-green-50 text-green-800 rounded-lg flex items-center gap-3 border border-green-200">
-                    <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
-                    <span className="text-sm font-medium">{successMsg}</span>
-                </div>
-            )}
-
-            {/* Redesigned summary cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Devices Online */}
-                <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
-                    <div className="flex justify-between items-start">
-                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Devices Online</span>
-                        <span className={clsx(
-                            "w-2 h-2 rounded-full",
-                            devices.length > 0 && devices.every(d => d.status === 'online') ? "bg-green-500" :
-                            devices.some(d => d.status === 'online') ? "bg-amber-500" : "bg-red-500"
-                        )}></span>
-                    </div>
-                    <div className="mt-4">
-                        <h3 className="text-2xl font-bold text-gray-950">
-                            {onlineDevicesCount} / {devices.length}
-                        </h3>
-                        <p className="text-xs text-gray-400 mt-1">
-                            {devices.length > 0 && devices.every(d => d.status === 'online') ? 'All devices healthy' : 
-                             devices.some(d => d.status === 'online') ? 'Some devices offline' : 'All devices offline'}
-                        </p>
-                    </div>
-                </div>
-
-                {/* Mapped Fingerprints */}
-                <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
-                    <div className="flex justify-between items-start">
-                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Mapped Fingerprints</span>
-                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                    </div>
-                    <div className="mt-4">
-                        <h3 className="text-2xl font-bold text-gray-950">{enrollments.length}</h3>
-                        <p className="text-xs text-gray-400 mt-1">Total biometric enrollments</p>
-                    </div>
-                </div>
-
-                {/* Today's Scans */}
-                <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
-                    <div className="flex justify-between items-start">
-                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Today's Scans</span>
-                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                    </div>
-                    <div className="mt-4">
-                        <h3 className="text-2xl font-bold text-gray-950">{todaysScansCount}</h3>
-                        <p className="text-xs text-gray-400 mt-1">Total scans registered today</p>
-                    </div>
-                </div>
-
-                {/* Pending Actions */}
-                <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
-                    <div className="flex justify-between items-start">
-                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Pending Actions</span>
-                        <span className={clsx(
-                            "w-2 h-2 rounded-full",
-                            pendingActionsCount > 0 ? "bg-amber-500 animate-pulse" : "bg-green-500"
-                        )}></span>
-                    </div>
-                    <div className="mt-4">
-                        <h3 className="text-2xl font-bold text-gray-950">{pendingActionsCount}</h3>
-                        <p className="text-xs text-gray-400 mt-1">
-                            {pendingActionsCount > 0 ? 'Requires hardware sync' : 'All templates fully synced'}
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            {/* Tabs Navigation */}
-            <div className="border-b border-gray-200">
-                <nav className="flex gap-6">
-                    <button
-                        onClick={() => setActiveTab('devices')}
-                        className={clsx(
-                            "pb-4 text-sm font-medium border-b-2 px-1 transition-all",
-                            activeTab === 'devices' 
-                                ? "border-indigo-600 text-indigo-600" 
-                                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                        )}
-                    >
-                        <span className="flex items-center gap-2">
-                            <Cpu className="w-4 h-4" />
-                            Devices
-                        </span>
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('enrollments')}
-                        className={clsx(
-                            "pb-4 text-sm font-medium border-b-2 px-1 transition-all",
-                            activeTab === 'enrollments' 
-                                ? "border-indigo-600 text-indigo-600" 
-                                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                        )}
-                    >
-                        <span className="flex items-center gap-2">
-                            <Link className="w-4 h-4" />
-                            Fingerprint Map
-                        </span>
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('logs')}
-                        className={clsx(
-                            "pb-4 text-sm font-medium border-b-2 px-1 transition-all",
-                            activeTab === 'logs' 
-                                ? "border-indigo-600 text-indigo-600" 
-                                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                        )}
-                    >
-                        <span className="flex items-center gap-2">
-                            <History className="w-4 h-4" />
-                            Live Scan Logs
-                        </span>
-                    </button>
-                </nav>
-            </div>
-
-            {/* TAB CONTENT: DEVICES */}
-            {activeTab === 'devices' && (
-                <div className="space-y-6">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-lg font-bold text-gray-800">Biometric Devices</h2>
-                        <button
-                            onClick={() => setShowAddDevice(!showAddDevice)}
-                            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-semibold flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
-                        >
-                            <Plus className="w-4 h-4" />
-                            Register K40 Device
-                        </button>
-                    </div>
-
-                    {showAddDevice && (
-                        <form onSubmit={handleAddDevice} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4 max-w-xl">
-                            <h3 className="font-bold text-gray-800">Register ZKTeco Device</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Device Name</label>
-                                    <input 
-                                        type="text" 
-                                        value={deviceName}
-                                        onChange={e => setDeviceName(e.target.value)}
-                                        placeholder="e.g. Reception Gate"
-                                        className="w-full p-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">IP Address</label>
-                                    <input 
-                                        type="text" 
-                                        value={deviceIp}
-                                        onChange={e => setDeviceIp(e.target.value)}
-                                        placeholder="e.g. 192.168.1.201"
-                                        className="w-full p-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Port</label>
-                                    <input 
-                                        type="number" 
-                                        value={devicePort}
-                                        onChange={e => setDevicePort(parseInt(e.target.value, 10))}
-                                        className="w-full p-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                                        required
-                                    />
-                                </div>
-                            </div>
-                            <div className="flex gap-2 justify-end">
-                                <button 
-                                    type="button" 
-                                    onClick={() => setShowAddDevice(false)}
-                                    className="px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg text-sm hover:bg-gray-50 cursor-pointer"
-                                >
-                                    Cancel
-                                </button>
-                                <button 
-                                    type="submit" 
-                                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 font-semibold cursor-pointer"
-                                >
-                                    Save Device
-                                </button>
-                            </div>
-                        </form>
-                    )}
-
-                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Device Name</th>
-                                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">IP Address</th>
-                                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Port</th>
-                                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Last Ping</th>
-                                    <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200 bg-white">
-                                {devices.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={6} className="px-6 py-8 text-center text-gray-500 text-sm">
-                                            No biometric devices registered. Wait for the sync agent to start or register a device manually above.
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    devices.map((device) => (
-                                        <tr key={device.id} className="hover:bg-gray-50 transition-colors">
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-800">{device.name}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{device.ipAddress}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{device.port}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className={clsx(
-                                                    "px-2.5 py-0.5 rounded-full text-xs font-semibold inline-flex items-center gap-1 border",
-                                                    device.status === 'online' 
-                                                        ? "bg-green-50 text-green-700 border-green-200" 
-                                                        : "bg-red-50 text-red-700 border-red-200"
-                                                )}>
-                                                    <span className={clsx("w-1.5 h-1.5 rounded-full", device.status === 'online' ? "bg-green-500" : "bg-red-500")}></span>
-                                                    {device.status.toUpperCase()}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {device.lastPing ? new Date(device.lastPing).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Never'}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                                                <button
-                                                    onClick={() => handleDeleteDevice(device.id)}
-                                                    className="text-red-600 hover:text-red-900 transition-colors p-1 cursor-pointer"
-                                                    title="Delete Device"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
-
-            {/* TAB CONTENT: ENROLLMENTS */}
-            {activeTab === 'enrollments' && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <form onSubmit={handleMapFingerprint} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm h-fit space-y-6">
-                        <h2 className="text-lg font-bold text-gray-800 mb-2 flex items-center gap-2">
-                            <Fingerprint className="w-5 h-5 text-indigo-600" />
-                            Map Fingerprint
-                        </h2>
-                        
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1">Select Gym Member</label>
-                            <select
-                                value={selectedMemberId}
-                                onChange={e => {
-                                    const memberId = e.target.value;
-                                    setSelectedMemberId(memberId);
-                                    const existing = enrollments.find(x => x.memberId === memberId);
-                                    if (existing) {
-                                        setDeviceUserIdInput(existing.deviceUserId.toString());
-                                    } else {
-                                        setDeviceUserIdInput('');
-                                    }
-                                }}
-                                className="w-full p-2.5 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all cursor-pointer"
-                                required
-                            >
-                                <option value="">-- Choose Member --</option>
-                                {members.map(m => {
-                                    const enrollRecord = enrollments.find(e => e.memberId === m.id);
-                                    let statusLabel = '';
-                                    if (enrollRecord) {
-                                        if (enrollRecord.syncStatus === 'synced') statusLabel = ' (Enrolled)';
-                                        else if (enrollRecord.syncStatus === 'needs_enrollment') statusLabel = ' (Pending)';
-                                        else if (enrollRecord.syncStatus === 'needs_deletion' || enrollRecord.syncStatus === 'deleted') statusLabel = ' (Deleted)';
-                                    } else {
-                                        statusLabel = ' (Not Enrolled)';
-                                    }
-                                    return (
-                                        <option key={m.id} value={m.id}>
-                                            {m.fullName} ({m.phone}){statusLabel}
-                                        </option>
-                                    );
-                                })}
-                            </select>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1">Device User ID (Keypad ID)</label>
-                            <input
-                                type="text"
-                                value={deviceUserIdInput}
-                                onChange={e => setDeviceUserIdInput(e.target.value)}
-                                placeholder="e.g. 101"
-                                className="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                                required
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">Enrollment Status</label>
-                            <div className="flex items-center gap-2">
-                                {(() => {
-                                    if (!selectedMemberId) {
-                                        return (
-                                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-gray-50 text-gray-500 border border-gray-200">
-                                                ⚪ Not Enrolled
-                                            </span>
-                                        );
-                                    }
-                                    const enrollRecord = enrollments.find(e => e.memberId === selectedMemberId);
-                                    if (enrollRecord) {
-                                        if (enrollRecord.syncStatus === 'synced') {
-                                            return (
-                                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-green-50 text-green-700 border border-green-200">
-                                                    🟢 Enrolled
-                                                </span>
-                                            );
-                                        }
-                                        if (enrollRecord.syncStatus === 'needs_enrollment') {
-                                            return (
-                                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                                                    🟡 Pending Enrollment
-                                                </span>
-                                            );
-                                        }
-                                        if (enrollRecord.syncStatus === 'needs_deletion' || enrollRecord.syncStatus === 'deleted') {
-                                            return (
-                                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-red-50 text-red-700 border border-red-200">
-                                                    🔴 Deleted
-                                                </span>
-                                            );
-                                        }
-                                    }
-                                    return (
-                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-gray-50 text-gray-500 border border-gray-200">
-                                            ⚪ Not Enrolled
-                                        </span>
-                                    );
-                                })()}
-                            </div>
-                        </div>
-
-                        <div className="bg-slate-50 border border-slate-100 rounded-lg p-4 space-y-2">
-                            <h4 className="text-sm font-bold text-slate-800">Enrollment Process</h4>
-                            <ol className="list-decimal list-inside text-sm text-slate-600 space-y-2">
-                                <li>Create member in Iron Gym</li>
-                                <li>Enroll fingerprint manually on K40 device</li>
-                                <li>Note User ID assigned on K40 keypad</li>
-                                <li>Select member above and enter K40 User ID</li>
-                                <li>Click Map Fingerprint ID</li>
-                            </ol>
-                        </div>
-
-                        <div>
-                            <button
-                                type="submit"
-                                disabled={!selectedMemberId || !deviceUserIdInput || loading}
-                                className={clsx(
-                                    "w-full py-3 text-white rounded-lg text-sm font-bold shadow-md transition-all flex justify-center items-center gap-2",
-                                    selectedMemberId && deviceUserIdInput && !loading
-                                        ? "bg-indigo-600 hover:bg-indigo-700 cursor-pointer"
-                                        : "bg-gray-300 cursor-not-allowed shadow-none"
-                                )}
-                            >
-                                <CheckCircle className="w-4 h-4" />
-                                Map Fingerprint ID
-                            </button>
-                        </div>
-                    </form>
-
-                    <div className="lg:col-span-2 space-y-4">
-                        <div className="flex flex-wrap items-center justify-between gap-4">
-                            <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full">
-                                <button
-                                    onClick={() => setEnrollmentFilter('all')}
-                                    className={clsx(
-                                        "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer",
-                                        enrollmentFilter === 'all'
-                                            ? "bg-indigo-600 border-indigo-600 text-white"
-                                            : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                                    )}
-                                >
-                                    All ({enrollments.length})
-                                </button>
-                                <button
-                                    onClick={() => setEnrollmentFilter('active')}
-                                    className={clsx(
-                                        "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer",
-                                        enrollmentFilter === 'active'
-                                            ? "bg-indigo-600 border-indigo-600 text-white"
-                                            : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                                    )}
-                                >
-                                    Active ({enrollments.filter(e => e.memberStatus === 'active').length})
-                                </button>
-                                <button
-                                    onClick={() => setEnrollmentFilter('expired')}
-                                    className={clsx(
-                                        "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer",
-                                        enrollmentFilter === 'expired'
-                                            ? "bg-indigo-600 border-indigo-600 text-white"
-                                            : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                                    )}
-                                >
-                                    Expired ({enrollments.filter(e => e.memberStatus === 'expired').length})
-                                </button>
-                                <button
-                                    onClick={() => setEnrollmentFilter('needs_enrollment')}
-                                    className={clsx(
-                                        "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer",
-                                        enrollmentFilter === 'needs_enrollment'
-                                            ? "bg-indigo-600 border-indigo-600 text-white"
-                                            : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                                    )}
-                                >
-                                    Re-Enroll ({enrollments.filter(e => e.syncStatus === 'needs_enrollment').length})
-                                </button>
-                                <button
-                                    onClick={() => setEnrollmentFilter('needs_deletion')}
-                                    className={clsx(
-                                        "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer",
-                                        enrollmentFilter === 'needs_deletion'
-                                            ? "bg-indigo-600 border-indigo-600 text-white"
-                                            : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                                    )}
-                                >
-                                    Needs Deletion ({enrollments.filter(e => e.syncStatus === 'needs_deletion').length})
-                                </button>
-                            </div>
-
-                            <div className="flex items-center gap-2 bg-white px-3 py-1.5 border border-gray-300 rounded-lg max-w-xs w-full shadow-sm">
-                                <Search className="w-4 h-4 text-gray-400" />
-                                <input
-                                    type="text"
-                                    value={searchQuery}
-                                    onChange={e => setSearchQuery(e.target.value)}
-                                    placeholder="Search enrollment..."
-                                    className="bg-transparent border-none outline-none text-xs w-full"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Member Name</th>
-                                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Membership Status</th>
-                                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Days Remaining</th>
-                                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Device User ID</th>
-                                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Sync Status</th>
-                                        <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-200 bg-white">
-                                    {filteredEnrollments.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={6} className="px-6 py-8 text-center text-gray-500 text-sm">
-                                                No enrollments found matching the filters.
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        filteredEnrollments.map((enroll) => {
-                                            const subInfo = getDaysRemainingForMember(enroll.memberId);
-                                            return (
-                                                <tr key={enroll.id} className="hover:bg-gray-50 transition-colors">
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-800">{enroll.memberName}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <span className={clsx(
-                                                            "px-2.5 py-0.5 rounded-full text-xs font-semibold border inline-flex items-center",
-                                                            enroll.memberStatus === 'active' && "bg-green-50 text-green-700 border-green-200",
-                                                            enroll.memberStatus === 'expired' && "bg-red-50 text-red-700 border-red-200",
-                                                            enroll.memberStatus === 'inactive' && "bg-gray-100 text-gray-600 border-gray-200"
-                                                        )}>
-                                                            {enroll.memberStatus === 'active' ? 'Active' : 
-                                                             enroll.memberStatus === 'expired' ? 'Expired' : 'Inactive'}
-                                                        </span>
-                                                    </td>
-                                                    <td className={clsx(
-                                                        "px-6 py-4 whitespace-nowrap text-sm font-medium",
-                                                        subInfo.days <= 0 && "text-red-600",
-                                                        subInfo.days > 0 && subInfo.days <= 7 && "text-amber-600",
-                                                        subInfo.days > 7 && "text-gray-600"
-                                                    )}>
-                                                        {subInfo.label}
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-600">{enroll.deviceUserId}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <span className={clsx(
-                                                            "px-2.5 py-0.5 rounded-full text-xs font-semibold inline-flex items-center gap-1 border",
-                                                            enroll.syncStatus === 'synced' && "bg-green-50 text-green-700 border-green-200",
-                                                            (enroll.syncStatus === 'needs_deletion' || enroll.syncStatus === 'needs_enrollment') && "bg-amber-50 text-amber-700 border-amber-200",
-                                                            enroll.syncStatus === 'deleted' && "bg-red-50 text-red-700 border-red-200"
-                                                        )}>
-                                                            {enroll.syncStatus === 'synced' && 'Active'}
-                                                            {(enroll.syncStatus === 'needs_deletion' || enroll.syncStatus === 'needs_enrollment') && 'Pending Sync'}
-                                                            {enroll.syncStatus === 'deleted' && 'Deleted'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                                                        <button
-                                                            onClick={() => handleUnlink(enroll.id)}
-                                                            className="text-red-600 hover:text-red-900 transition-colors p-1 cursor-pointer"
-                                                            title="Delete Mapping"
-                                                        >
-                                                            <Unlink className="w-4 h-4" />
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* TAB CONTENT: LOGS */}
-            {activeTab === 'logs' && (
-                <div className="space-y-4">
-                    <h2 className="text-lg font-bold text-gray-800">Biometric Access Audit Logs</h2>
-                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Timestamp</th>
-                                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Member Name</th>
-                                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Device User ID</th>
-                                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Device Name</th>
-                                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Audit Status</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200 bg-white">
-                                {logs.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={5} className="px-6 py-8 text-center text-gray-500 text-sm">
-                                            No scan events recorded yet. Turn on the local sync agent or simulate scan events to test the flow.
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    logs.map((log) => (
-                                        <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {new Date(log.scanTimestamp).toLocaleString()}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-800">{log.memberName}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">{log.deviceUserId}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{log.deviceName}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className={clsx(
-                                                    "px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1 border",
-                                                    log.status === 'success' && "bg-green-50 text-green-700 border-green-200",
-                                                    log.status === 'denied_no_plan' && "bg-red-50 text-red-700 border-red-200",
-                                                    log.status === 'unknown_user' && "bg-amber-50 text-amber-700 border-amber-200",
-                                                    log.status === 'failed' && "bg-red-50 text-red-700 border-red-200",
-                                                    log.status === 'pending' && "bg-gray-100 text-gray-600"
-                                                )}>
-                                                    {log.status === 'success' && (
-                                                        <>
-                                                            <CheckCircle className="w-3.5 h-3.5 text-green-500" />
-                                                            Access Granted
-                                                        </>
-                                                    )}
-                                                    {log.status === 'denied_no_plan' && (
-                                                        <>
-                                                            <XCircle className="w-3.5 h-3.5 text-red-500" />
-                                                            Access Denied (No Active Plan)
-                                                        </>
-                                                    )}
-                                                    {log.status === 'unknown_user' && (
-                                                        <>
-                                                            <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                                                            Unknown User Mapping
-                                                        </>
-                                                    )}
-                                                    {log.status === 'failed' && (
-                                                        <>
-                                                            <XCircle className="w-3.5 h-3.5 text-red-500" />
-                                                            Scan Processing Failed
-                                                        </>
-                                                    )}
-                                                    {log.status === 'pending' && 'Pending Verification'}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
+      {/* ── HEADER ── */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            Biometrics Gateway
+          </h1>
+          <p className="text-sm text-slate-500">
+            Hardware terminal monitoring, member fingerprint mapping, and scan simulator.
+          </p>
         </div>
-    );
+
+        <div className="flex items-center gap-3">
+          <FilterChips
+            size="md"
+            value={activeTab}
+            onChange={(val) => setActiveTab(val as any)}
+            options={[
+              { value: 'overview', label: 'Hardware Terminals' },
+              { value: 'enrollments', label: 'Enrolled Users', count: enrollments.length },
+              { value: 'simulator', label: 'Scan Simulator' },
+            ]}
+          />
+
+          <button
+            type="button"
+            onClick={() => setShowAddDevice(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all cursor-pointer shadow-sm shadow-blue-500/20"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Add Terminal</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── 1. HARDWARE OVERVIEW TAB ── */}
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {devices.map((device) => (
+              <DeviceStatusPanel
+                key={device.id}
+                device={device}
+                enrolledCount={enrollments.length}
+                todayScansCount={todayScansCount}
+                onRefresh={handleRefreshPing}
+                onDelete={() => handleDeleteDevice(device.id)}
+                isRefreshing={isRefreshing}
+              />
+            ))}
+          </div>
+
+          {/* Quick simulator widget on overview */}
+          <div className="pt-2">
+            <ScanSimulator
+              enrollments={enrollments}
+              onScanSimulated={handleScanSimulated}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── 2. ENROLLED USERS TAB ── */}
+      {activeTab === 'enrollments' && (
+        <EnrollmentGrid
+          enrollments={enrollments}
+          onDeleteEnrollment={handleDeleteEnrollment}
+          loading={loading}
+        />
+      )}
+
+      {/* ── 3. SIMULATOR TAB ── */}
+      {activeTab === 'simulator' && (
+        <div className="max-w-2xl mx-auto space-y-4">
+          <ScanSimulator
+            enrollments={enrollments}
+            onScanSimulated={handleScanSimulated}
+          />
+        </div>
+      )}
+
+      {/* ── ADD DEVICE MODAL ── */}
+      {showAddDevice && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm"
+        >
+          <div className="w-full max-w-md p-px rounded-2xl bg-slate-200/90 shadow-2xl overflow-hidden animate-[scale-in_150ms_cubic-bezier(0.23,1,0.32,1)_both]">
+            <div className="bg-white rounded-[15px] p-6 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <h3 className="text-base font-bold text-slate-900">
+                  Connect Biometric Device
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowAddDevice(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleAddDevice} className="space-y-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase mb-1">
+                    Device Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newDeviceName}
+                    onChange={(e) => setNewDeviceName(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 uppercase mb-1">
+                      IP Address
+                    </label>
+                    <input
+                      type="text"
+                      value={newDeviceIp}
+                      onChange={(e) => setNewDeviceIp(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 font-mono border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 uppercase mb-1">
+                      Port
+                    </label>
+                    <input
+                      type="number"
+                      value={newDevicePort}
+                      onChange={(e) => setNewDevicePort(Number(e.target.value))}
+                      required
+                      className="w-full px-3 py-2 font-mono border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddDevice(false)}
+                    className="px-4 py-2 border border-slate-200 rounded-lg font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={addDeviceLoading}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold flex items-center gap-1.5 shadow-sm"
+                  >
+                    {addDeviceLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>Connect Terminal</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default Biometrics;

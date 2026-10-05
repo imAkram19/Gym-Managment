@@ -12,6 +12,8 @@ import { AddSubscriptionModal } from '../components/members/AddSubscriptionModal
 import { EditMemberModal } from '../components/members/EditMemberModal';
 import { ExtendMembershipModal } from '../components/members/ExtendMembershipModal';
 import { DeleteMemberModal } from '../components/members/DeleteMemberModal';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { notify } from '../lib/toast';
 
 const MemberDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -36,9 +38,13 @@ const MemberDetail: React.FC = () => {
 
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [isRestoring, setIsRestoring] = useState(false);
+    const [confirmForceExpire, setConfirmForceExpire] = useState(false);
+    const [confirmActivate, setConfirmActivate] = useState(false);
+    const [confirmRestore, setConfirmRestore] = useState(false);
+    const [confirmUnlink, setConfirmUnlink] = useState(false);
+    const [subToExpire, setSubToExpire] = useState<Subscription | null>(null);
 
     const handleForceExpire = async () => {
-        if (!confirm('Are you sure you want to FORCE EXPIRE this membership immediately? This will disable door access and mark the biometric enrollment for deletion.')) return;
         setLoading(true);
         try {
             // Update member status
@@ -64,18 +70,18 @@ const MemberDetail: React.FC = () => {
             const { error: syncError } = await supabase.rpc('sync_member_statuses');
             if (syncError) console.error('Failed to sync member statuses:', syncError);
 
+            setConfirmForceExpire(false);
             await loadData();
-            alert('Membership force expired successfully. Biometric deletion command sent.');
+            notify.memberUpdated(member?.fullName || 'Member');
         } catch (err: any) {
             console.error(err);
-            alert(err.message || 'Failed to force expire membership');
+            notify.error(err.message || 'Failed to force expire membership');
         } finally {
             setLoading(false);
         }
     };
 
     const handleActivate = async () => {
-        if (!confirm('Are you sure you want to ACTIVATE this membership?')) return;
         setLoading(true);
         try {
             // Update member status to active
@@ -130,11 +136,12 @@ const MemberDetail: React.FC = () => {
             const { error: syncError } = await supabase.rpc('sync_member_statuses');
             if (syncError) console.error('Failed to sync member statuses:', syncError);
 
+            setConfirmActivate(false);
             await loadData();
-            alert('Membership activated successfully.');
+            notify.subRenewed(member?.fullName || 'Member', 'Active Plan');
         } catch (err: any) {
             console.error(err);
-            alert(err.message || 'Failed to activate membership');
+            notify.error(err.message || 'Failed to activate membership');
         } finally {
             setLoading(false);
         }
@@ -190,14 +197,16 @@ const MemberDetail: React.FC = () => {
 
     const handleUnlinkBiometrics = async () => {
         if (!enrollment) return;
-        if (!confirm('Are you sure you want to remove this fingerprint mapping?')) return;
         setBiometricLoading(true);
         setBiometricError('');
         try {
             await deleteBiometricEnrollment(enrollment.id);
             setEnrollment(null);
+            setConfirmUnlink(false);
+            notify.memberUpdated(member?.fullName || 'Member');
         } catch (err: any) {
             setBiometricError(err.message || 'Failed to unlink fingerprint.');
+            notify.error(err.message || 'Failed to unlink fingerprint.');
         } finally {
             setBiometricLoading(false);
         }
@@ -205,15 +214,15 @@ const MemberDetail: React.FC = () => {
 
     const handleRestoreMember = async () => {
         if (!id) return;
-        if (!confirm('Are you sure you want to RESTORE this member profile and active status?')) return;
         setIsRestoring(true);
         try {
             await restoreMember(id);
-            alert('Member profile restored successfully.');
+            setConfirmRestore(false);
+            notify.memberUpdated(member?.fullName || 'Member');
             await loadData();
         } catch (err: any) {
             console.error('Failed to restore member:', err);
-            alert(err.message || 'Failed to restore member');
+            notify.error(err.message || 'Failed to restore member');
         } finally {
             setIsRestoring(false);
         }
@@ -238,8 +247,19 @@ const MemberDetail: React.FC = () => {
 
             {/* Header */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-6 items-center md:items-start">
-                <div className="w-24 h-24 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 text-3xl font-bold">
-                    {member.fullName.charAt(0).toUpperCase()}
+                <div className="w-24 h-24 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-3xl font-bold border-2 border-blue-200 shadow-sm shrink-0 overflow-hidden">
+                    {member.imageUrl ? (
+                        <img
+                            src={member.imageUrl}
+                            alt={member.fullName}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                            }}
+                        />
+                    ) : (
+                        member.fullName.charAt(0).toUpperCase()
+                    )}
                 </div>
                 <div className="flex-1 text-center md:text-left">
                     <h1 className="text-2xl font-bold text-gray-900">{member.fullName}</h1>
@@ -303,7 +323,7 @@ const MemberDetail: React.FC = () => {
                     {member.deletedAt ? (
                         <>
                             <button
-                                onClick={handleRestoreMember}
+                                onClick={() => setConfirmRestore(true)}
                                 disabled={isRestoring}
                                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50"
                             >
@@ -334,14 +354,14 @@ const MemberDetail: React.FC = () => {
                             )}
                             {member.status === 'active' ? (
                                 <button
-                                    onClick={handleForceExpire}
+                                    onClick={() => setConfirmForceExpire(true)}
                                     className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold transition-colors"
                                 >
                                     Force Expire
                                 </button>
                             ) : (
                                 <button
-                                    onClick={handleActivate}
+                                    onClick={() => setConfirmActivate(true)}
                                     className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors"
                                 >
                                     Activate Membership
@@ -480,7 +500,7 @@ const MemberDetail: React.FC = () => {
                                                     </div>
                                                 </div>
                                                 <button
-                                                    onClick={handleUnlinkBiometrics}
+                                                    onClick={() => setConfirmUnlink(true)}
                                                     disabled={biometricLoading}
                                                     className="px-4 py-2 bg-white hover:bg-red-50 text-red-600 border border-red-200 hover:border-red-300 font-semibold text-sm rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 shrink-0 self-start sm:self-center shadow-sm"
                                                 >
@@ -545,7 +565,7 @@ const MemberDetail: React.FC = () => {
                                 sub.planName,
                                 sub.startDate,
                                 sub.endDate,
-                                `₹${sub.price}`,
+                                <span className="font-mono tabular-nums">₹{Number(sub.price).toLocaleString('en-IN')}</span>,
                                 <span className={clsx(
                                     "px-2 py-0.5 rounded-full text-xs font-semibold",
                                     sub.isActive ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
@@ -554,18 +574,7 @@ const MemberDetail: React.FC = () => {
                                 </span>,
                                 sub.isActive ? (
                                     <button
-                                        onClick={async () => {
-                                            if (!confirm('Are you sure you want to expire this subscription immediately to test the access blocking?')) return;
-                                            try {
-                                                setLoading(true);
-                                                await expireSubscription(sub.id);
-                                                await loadData();
-                                            } catch (err: any) {
-                                                alert(err.message || 'Failed to expire subscription');
-                                            } finally {
-                                                setLoading(false);
-                                            }
-                                        }}
+                                        onClick={() => setSubToExpire(sub)}
                                         className="px-2.5 py-1 text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded font-semibold transition-colors"
                                     >
                                         Force Expire
@@ -580,7 +589,7 @@ const MemberDetail: React.FC = () => {
                             headers={['Date', 'Amount', 'Method', 'Note']}
                             rows={history.payments.map(pay => [
                                 pay.date,
-                                `₹${pay.amount}`,
+                                <span className="font-mono tabular-nums">₹{Number(pay.amount).toLocaleString('en-IN')}</span>,
                                 pay.method.toUpperCase(),
                                 pay.adminNote || '-'
                             ])}
@@ -642,6 +651,70 @@ const MemberDetail: React.FC = () => {
                     }}
                 />
             )}
+
+            {/* Confirm Dialogs */}
+            <ConfirmDialog
+                isOpen={confirmForceExpire}
+                variant="danger"
+                title="Force Expire Membership?"
+                description="Are you sure you want to FORCE EXPIRE this membership immediately? This will disable door access and mark the biometric enrollment for deletion."
+                confirmLabel="Expire Now"
+                onClose={() => setConfirmForceExpire(false)}
+                onConfirm={handleForceExpire}
+            />
+
+            <ConfirmDialog
+                isOpen={confirmActivate}
+                variant="primary"
+                title="Activate Membership?"
+                description="Are you sure you want to ACTIVATE this membership? This will grant active gym floor access."
+                confirmLabel="Activate"
+                onClose={() => setConfirmActivate(false)}
+                onConfirm={handleActivate}
+            />
+
+            <ConfirmDialog
+                isOpen={confirmRestore}
+                variant="primary"
+                title="Restore Member Profile?"
+                description="Are you sure you want to RESTORE this member profile from the archive?"
+                confirmLabel="Restore Member"
+                onClose={() => setConfirmRestore(false)}
+                onConfirm={handleRestoreMember}
+            />
+
+            <ConfirmDialog
+                isOpen={confirmUnlink}
+                variant="warning"
+                title="Unlink Biometric Fingerprint?"
+                description="Are you sure you want to remove this member's fingerprint mapping from the system?"
+                confirmLabel="Unlink Mapping"
+                onClose={() => setConfirmUnlink(false)}
+                onConfirm={handleUnlinkBiometrics}
+            />
+
+            <ConfirmDialog
+                isOpen={!!subToExpire}
+                variant="danger"
+                title="Expire Subscription?"
+                description={`Are you sure you want to expire the ${subToExpire?.planName || ''} subscription immediately to test access blocking?`}
+                confirmLabel="Expire Subscription"
+                onClose={() => setSubToExpire(null)}
+                onConfirm={async () => {
+                    if (!subToExpire) return;
+                    try {
+                        setLoading(true);
+                        await expireSubscription(subToExpire.id);
+                        notify.success('Subscription expired successfully');
+                        await loadData();
+                    } catch (err: any) {
+                        notify.error(err.message || 'Failed to expire subscription');
+                    } finally {
+                        setLoading(false);
+                        setSubToExpire(null);
+                    }
+                }}
+            />
         </div>
     );
 };

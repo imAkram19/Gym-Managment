@@ -1,19 +1,367 @@
+/* ============================================================
+   IRON GYM V2 — FULL CSS DESIGN SYSTEM
+   Cool Slate / Cobalt Blue / Light Mode
+   Following animate-skill & high-end-visual-design-skill specs
+   ============================================================ */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  html {
-    font-family: 'Inter', sans-serif;
-  }
+/* ── DESIGN TOKENS ─────────────────────────────────────────── */
+:root {
+  /* Surfaces */
+  --surface-ground:    hsl(220, 20%, 97%);
+  --surface-raised:    hsl(0, 0%, 100%);
+  --surface-overlay:   hsl(220, 18%, 98%);
+  --surface-float:     hsl(0, 0%, 100%);
+  --surface-sidebar:   hsl(224, 32%, 20%);
+  --surface-topbar:    hsl(0, 0%, 100%);
 
-  input,
-  textarea,
-  select {
-    @apply text-gray-900;
-  }
+  /* Primary Accent: Cobalt Blue */
+  --accent:            hsl(221, 83%, 53%);
+  --accent-hover:      hsl(221, 83%, 46%);
+  --accent-light:      hsl(221, 92%, 96%);
+  --accent-mid:        hsl(221, 70%, 88%);
+
+  /* Critical: Iron Red (expired / denied only) */
+  --danger:            hsl(356, 72%, 50%);
+  --danger-light:      hsl(356, 92%, 96%);
+  --danger-border:     hsl(356, 72%, 85%);
+
+  /* Status */
+  --status-active:     hsl(152, 55%, 40%);
+  --status-active-bg:  hsl(152, 60%, 95%);
+  --status-expiring:   hsl(38, 92%, 44%);
+  --status-expiring-bg:hsl(38, 100%, 96%);
+  --status-expired:    hsl(356, 72%, 50%);
+  --status-expired-bg: hsl(356, 92%, 96%);
+  --status-inactive:   hsl(220, 12%, 56%);
+  --status-inactive-bg:hsl(220, 14%, 94%);
+  --status-online:     hsl(142, 60%, 38%);
+  --status-online-bg:  hsl(142, 60%, 95%);
+  --status-offline:    hsl(220, 12%, 56%);
+  --status-offline-bg: hsl(220, 14%, 94%);
+
+  /* Typography */
+  --text-primary:      hsl(224, 30%, 14%);
+  --text-secondary:    hsl(220, 14%, 42%);
+  --text-muted:        hsl(220, 12%, 60%);
+  --text-on-sidebar:   hsl(220, 20%, 85%);
+  --text-on-accent:    hsl(0, 0%, 100%);
+
+  /* Borders */
+  --border-dim:        hsl(220, 18%, 92%);
+  --border-subtle:     hsl(220, 16%, 88%);
+  --border-strong:     hsl(220, 14%, 76%);
+  --border-accent:     hsl(221, 70%, 80%);
+
+  /* Glass */
+  --glass-bg:          rgba(255, 255, 255, 0.82);
+  --glass-border:      rgba(34, 45, 66, 0.08);
+  --glass-shadow:      0 4px 24px rgba(34, 45, 66, 0.10);
+  --glass-inner:       inset 0 1px 0 rgba(255, 255, 255, 0.90);
+
+  /* Shadows — blue-tinted, not black */
+  --shadow-card:       0 1px 4px rgba(34, 45, 66, 0.06), 0 4px 16px rgba(34, 45, 66, 0.06);
+  --shadow-raised:     0 4px 12px rgba(34, 45, 66, 0.10), 0 1px 3px rgba(34, 45, 66, 0.06);
+  --shadow-float:      0 8px 32px rgba(34, 45, 66, 0.16), 0 2px 8px rgba(34, 45, 66, 0.08);
+  --shadow-accent:     0 4px 14px rgba(37, 99, 235, 0.25);
+
+  /* Easing Curves — Emil-spec, no ease-in ever */
+  --ease-out:          cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out:       cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer:       cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring:       cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+  /* Spacing scale — 8-point grid */
+  --sp-1: 0.25rem;  --sp-2: 0.5rem;   --sp-3: 0.75rem;
+  --sp-4: 1rem;     --sp-6: 1.5rem;   --sp-8: 2rem;
+  --sp-12: 3rem;    --sp-16: 4rem;
+
+  /* Radius scale */
+  --radius-sm:    6px;
+  --radius-md:    10px;
+  --radius-lg:    16px;
+  --radius-xl:    20px;
+  --radius-pill:  9999px;
+
+  /* Layout */
+  --sidebar-width: 240px;
+  --topbar-height: 60px;
+}
+
+/* Collapsed sidebar state */
+[data-sidebar-collapsed] {
+  --sidebar-width: 64px;
+}
+
+/* ── MOBILE BASELINE ────────────────────────────────────────── */
+html {
+  /* Kill gray tap-highlight on touch devices */
+  -webkit-tap-highlight-color: transparent;
+  /* No font inflation in landscape */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Stop pull-to-refresh on the app shell */
+  overscroll-behavior: none;
 }
 
 body {
-  @apply bg-slate-900 text-white;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  background-color: var(--surface-ground);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* App shell MUST use dvh — 100vh overflows on iOS with URL bar visible */
+.app-shell {
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* All inputs: 16px min to prevent iOS zoom on focus */
+input, textarea, select {
+  font-size: 16px;
+}
+
+@media (min-width: 768px) {
+  /* Only scale down on desktop where zoom isn't an issue */
+  input, textarea, select {
+    font-size: 0.875rem;
+  }
+}
+
+/* All tappable elements: kill 300ms click delay + prevent long-press */
+button, a, [role="button"], label {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Minimum 48px touch targets for high-frequency reception actions */
+.touch-target {
+  min-height: 48px;
+  min-width: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Press feedback — animate skill: feedback purpose, 100ms duration */
+button:active,
+[role="button"]:active,
+.pressable:active {
+  transform: scale(0.97);
+  transition: transform 100ms var(--ease-out);
+}
+
+/* Hover: ONLY for true pointer devices (animate skill: hover gate) */
+@media (hover: hover) and (pointer: fine) {
+  .hoverable:hover {
+    /* hover styles inside this media query only */
+  }
+}
+
+/* Scroll containers */
+.scroll-content {
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+/* Safe area insets */
+.topbar-safe {
+  padding-top: max(env(safe-area-inset-top), 0px);
+}
+.sidebar-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+.toast-zone {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ── TYPOGRAPHY UTILITIES ───────────────────────────────────── */
+
+/* Tabular numerals for all data tables and stat cards */
+.numeric {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* ── DOUBLE-BEZEL CARD ──────────────────────────────────────── */
+/* High-end-visual-design skill: Doppelrand / nested architecture */
+/* Usage: <div class="card-bezel"><div class="card-inner">...</div></div> */
+.card-bezel {
+  padding: 1px;
+  border-radius: var(--radius-xl);
+  background: var(--border-subtle);
+  box-shadow: var(--shadow-card);
+}
+
+.card-inner {
+  border-radius: calc(var(--radius-xl) - 1px);
+  background: var(--surface-raised);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+}
+
+/* ── SCROLLBAR STYLING ──────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-pill);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* ── FOCUS RING ─────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── DATA TABLE ROWS (animate skill: stagger on mount) ─────── */
+/* animate skill: predetermined motion, CSS animation off main thread */
+/* Purpose: preventing jarring change (content teleport on load) */
+/* Duration: 280ms ease-out; stagger: 40ms (within 30-80ms Emil range) */
+.data-row {
+  animation: row-enter 280ms var(--ease-out) both;
+  animation-delay: calc(var(--row-index, 0) * 40ms);
+}
+
+@keyframes row-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Cap stagger at row 12 — beyond that no delay increase */
+/* Applied inline: style={{ '--row-index': Math.min(index, 12) }} */
+
+/* ── SKELETON ANIMATION ─────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--border-dim) 25%,
+    var(--surface-overlay) 50%,
+    var(--border-dim) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-sweep 1.8s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes skeleton-sweep {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── BIOMETRIC SCAN ANIMATIONS ──────────────────────────────── */
+/* animate skill: CSS animation (runs off main thread — stays smooth while Supabase writes) */
+/* Purpose: feedback (confirming scan accepted) — occasional frequency ✓ */
+
+@keyframes scan-pulse {
+  0%   { transform: scale(1);   opacity: 0.8; }
+  50%  { transform: scale(1.6); opacity: 0.4; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+@keyframes scan-deny {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-6px); }
+  40%       { transform: translateX(6px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(4px); }
+}
+
+.scan-pulse-ring {
+  animation: scan-pulse 0.6s var(--ease-out) forwards;
+}
+
+.scan-deny-shake {
+  animation: scan-deny 400ms ease-in-out both;
+}
+
+/* animate skill: reduced motion support always ships WITH the animation */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .scan-pulse-ring { animation: none; opacity: 0.6; }
+  .scan-deny-shake { animation: none; }
+  .data-row        { animation: none; }
+  .skeleton        { animation: none; background: var(--border-dim); }
+  button:active, [role="button"]:active, .pressable:active {
+    transform: none;
+  }
+}
+
+/* ── SIDEBAR CSS-VARIABLE TRANSITION ───────────────────────── */
+/* Animating CSS variable update vs layout reflow — GPU-safe */
+.sidebar-transition {
+  transition: width 250ms var(--ease-drawer);
+}
+
+/* ── MOBILE BOTTOM NAV ──────────────────────────────────────── */
+.mobile-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border-dim);
+}
+
+/* backdrop-blur only on fixed/sticky elements — performance guardrail */
+.glass-fixed {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* ── UTILITY CLASSES ────────────────────────────────────────── */
+.text-display  { font-size: 2rem;      line-height: 1.1; letter-spacing: -0.03em; }
+.text-title    { font-size: 1.375rem;  line-height: 1.2; letter-spacing: -0.02em; }
+.text-heading  { font-size: 1.0625rem; line-height: 1.3; letter-spacing: -0.01em; }
+.text-base-IG  { font-size: 0.875rem;  line-height: 1.5; }
+.text-sm-IG    { font-size: 0.75rem;   line-height: 1.4; letter-spacing: 0.01em; }
+.text-xs-IG    { font-size: 0.6875rem; line-height: 1.4; letter-spacing: 0.02em; }
+
+/* ── SIDEBAR NAV ITEM ACTIVE INDICATOR ─────────────────────── */
+.nav-active-indicator {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  background: var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out);
+}
+
+/* ── NO SCROLLBAR UTILITY ──────────────────────────────────── */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }

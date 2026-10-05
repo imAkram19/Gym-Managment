@@ -49,6 +49,7 @@ export const deleteBiometricDevice = async (id: string) => {
 export interface BiometricEnrollmentWithMember extends BiometricEnrollment {
     memberName: string;
     memberStatus: string;
+    memberImage?: string | null;
 }
 
 export const getBiometricEnrollments = async (): Promise<BiometricEnrollmentWithMember[]> => {
@@ -59,6 +60,7 @@ export const getBiometricEnrollments = async (): Promise<BiometricEnrollmentWith
             members (
                 full_name,
                 status,
+                image_url,
                 deleted_at
             )
         `)
@@ -75,7 +77,8 @@ export const getBiometricEnrollments = async (): Promise<BiometricEnrollmentWith
             enrolledAt: enroll.enrolled_at,
             syncStatus: enroll.sync_status || 'synced',
             memberName: enroll.members?.full_name || 'Unknown',
-            memberStatus: enroll.members?.status || 'unknown'
+            memberStatus: enroll.members?.status || 'unknown',
+            memberImage: enroll.members?.image_url || null,
         }));
 };
 

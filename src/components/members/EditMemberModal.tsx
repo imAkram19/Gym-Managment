@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, User, Receipt } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { notify } from '../../lib/toast';
 import type { Member, Subscription } from '../../types';
 
 interface EditMemberModalProps {
@@ -8,7 +9,7 @@ interface EditMemberModalProps {
     onClose: () => void;
     onSuccess: () => void;
     member: Member;
-    latestSubscription: Subscription | null;
+    latestSubscription?: Subscription | null;
 }
 
 export const EditMemberModal: React.FC<EditMemberModalProps> = ({
@@ -16,7 +17,7 @@ export const EditMemberModal: React.FC<EditMemberModalProps> = ({
     onClose,
     onSuccess,
     member,
-    latestSubscription
+    latestSubscription = null
 }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -56,6 +57,23 @@ export const EditMemberModal: React.FC<EditMemberModalProps> = ({
             }
         }
     }, [latestSubscription]);
+
+    // Escape key listener & body scroll lock
+    useEffect(() => {
+        if (!isOpen) return;
+        document.body.style.overflow = 'hidden';
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.body.style.overflow = '';
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [isOpen, onClose]);
 
     // Validation rules
     const validate = (data: typeof formData) => {
@@ -288,11 +306,13 @@ export const EditMemberModal: React.FC<EditMemberModalProps> = ({
             const { error: syncError } = await supabase.rpc('sync_member_statuses');
             if (syncError) console.error('Failed to sync member statuses:', syncError);
 
+            notify.memberUpdated(formData.fullName);
             onSuccess();
             onClose();
         } catch (err: any) {
             console.error(err);
             setError(err.message || 'Failed to update member');
+            notify.error(err.message || 'Failed to update member');
         } finally {
             setLoading(false);
         }
@@ -318,7 +338,11 @@ export const EditMemberModal: React.FC<EditMemberModalProps> = ({
             <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center p-6 border-b border-gray-100 sticky top-0 bg-white z-10">
                     <h2 className="text-xl font-bold text-gray-900">Edit Profile & Membership</h2>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
+                    <button
+                        onClick={onClose}
+                        className="p-2 hover:bg-gray-100 rounded-full"
+                        aria-label="Close modal"
+                    >
                         <X className="w-5 h-5 text-gray-500" />
                     </button>
                 </div>
