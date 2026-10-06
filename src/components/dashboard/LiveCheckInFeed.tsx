@@ -2,6 +2,7 @@ import React from 'react';
 import { Fingerprint, UserCheck, QrCode, Clock, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { EmptyState } from '../ui/EmptyState';
+import { formatTime12h } from '../../lib/formatters';
 import type { LiveCheckInItem } from '../../hooks/useLiveCheckIns';
 
 interface LiveCheckInFeedProps {
@@ -97,7 +98,7 @@ export const LiveCheckInFeed: React.FC<LiveCheckInFeedProps> = ({
                     <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
                       <span className="flex items-center gap-1 font-mono">
                         <Clock className="w-3 h-3 text-slate-400" />
-                        {item.checkInTime}
+                        {formatTime12h(item.checkInTime)}
                       </span>
                       <span>·</span>
                       <span className="capitalize">{item.method}</span>

@@ -69,7 +69,7 @@ function AppShellInner() {
 // Matches the 5 core sections of the desktop sidebar identically
 
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, Trophy, CalendarCheck, Fingerprint } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, CalendarCheck, ShieldCheck } from 'lucide-react';
 import { clsx } from 'clsx';
 
 const MOBILE_NAV_ITEMS = [
@@ -77,7 +77,7 @@ const MOBILE_NAV_ITEMS = [
   { label: 'Members',       path: '/members',      icon: Users },
   { label: 'Leaderboard',   path: '/leaderboard',  icon: Trophy },
   { label: 'Attendance',    path: '/attendance',   icon: CalendarCheck },
-  { label: 'Biometrics',    path: '/biometrics',   icon: Fingerprint },
+  { label: 'Owner Vault',   path: '/vault',        icon: ShieldCheck },
 ] as const;
 
 function MobileBottomNav() {

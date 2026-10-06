@@ -38,9 +38,7 @@ export const OwnerFinancialPanel: React.FC<OwnerFinancialPanelProps> = ({
   hourlyTraffic,
   loading = false,
 }) => {
-  const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
-    return localStorage.getItem('irongym_owner_access') === 'true';
-  });
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -51,7 +49,7 @@ export const OwnerFinancialPanel: React.FC<OwnerFinancialPanelProps> = ({
     if (password === expected) {
       setIsUnlocked(true);
       setError('');
-      localStorage.setItem('irongym_owner_access', 'true');
+      localStorage.removeItem('irongym_owner_access');
       notify.update('owner-auth', 'success', 'Owner dashboard unlocked.');
     } else {
       setError('Incorrect password.');

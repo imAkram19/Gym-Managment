@@ -2,17 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LiveHUD } from '../components/dashboard/LiveHUD';
 import { LiveCheckInFeed } from '../components/dashboard/LiveCheckInFeed';
-import { OwnerFinancialPanel } from '../components/dashboard/OwnerFinancialPanel';
 import { SlideOver } from '../components/ui/SlideOver';
 import { MemberDetailSheet } from '../components/members/MemberDetailSheet';
 import { useLiveCheckIns } from '../hooks/useLiveCheckIns';
 import { getBiometricDevices } from '../lib/api/biometrics';
-import {
-  getDashboardStats,
-  getRecentPayments,
-  getRevenueData,
-  getHourlyTrafficData,
-} from '../lib/api/dashboard';
+import { getDashboardStats } from '../lib/api/dashboard';
 import type { BiometricDevice } from '../types';
 
 const Dashboard: React.FC = () => {
@@ -29,32 +23,14 @@ const Dashboard: React.FC = () => {
   // Selected member for slide-over drawer
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
-  // Financial data state (loaded for owner panel)
-  const [financialStats, setFinancialStats] = useState({
-    monthlyRevenue: 0,
-    totalCollections: 0,
-    cashPayments: 0,
-    upiPayments: 0,
-    otherPayments: 0,
-    revenueTrend: 0,
-    avgPaymentAmount: 0,
-    totalTransactions: 0,
-  });
-  const [recentPayments, setRecentPayments] = useState<any[]>([]);
-  const [revenueData, setRevenueData] = useState<any[]>([]);
-  const [hourlyTraffic, setHourlyTraffic] = useState<any[]>([]);
-
   useEffect(() => {
     let isMounted = true;
 
     const loadInitialDashboard = async () => {
       try {
-        const [devices, stats, payments, chartData, traffic] = await Promise.all([
+        const [devices, stats] = await Promise.all([
           getBiometricDevices(),
           getDashboardStats(),
-          getRecentPayments(8),
-          getRevenueData(),
-          getHourlyTrafficData(),
         ]);
 
         if (isMounted) {
@@ -63,19 +39,6 @@ const Dashboard: React.FC = () => {
           }
           setActiveMembersCount(stats.activeMembers || 0);
           setExpiringSoonCount(stats.expiringSoon || 0);
-          setFinancialStats({
-            monthlyRevenue: stats.monthlyRevenue || 0,
-            totalCollections: stats.totalCollections || 0,
-            cashPayments: stats.cashPayments || 0,
-            upiPayments: stats.upiPayments || 0,
-            otherPayments: stats.otherPayments || 0,
-            revenueTrend: stats.revenueTrend || 0,
-            avgPaymentAmount: stats.avgPaymentAmount || 0,
-            totalTransactions: stats.totalTransactions || 0,
-          });
-          setRecentPayments(payments || []);
-          setRevenueData(chartData || []);
-          setHourlyTraffic(traffic || []);
         }
       } catch (err) {
         console.error('Failed to load dashboard overview data:', err);
@@ -110,7 +73,6 @@ const Dashboard: React.FC = () => {
           onAttendanceClick={() => navigate('/attendance')}
           onExpiringClick={() => navigate('/members?filter=expiring')}
           onActiveClick={() => navigate('/members?filter=active')}
-          onDeviceClick={() => navigate('/biometrics')}
         />
       </div>
 
@@ -120,16 +82,6 @@ const Dashboard: React.FC = () => {
           checkIns={checkIns}
           isLoading={isFeedLoading}
           onMemberClick={(id) => setSelectedMemberId(id)}
-        />
-      </div>
-
-      {/* ── 3. OWNER FINANCIAL PANEL (Password protected) ── */}
-      <div className="pt-2 border-t border-slate-200">
-        <OwnerFinancialPanel
-          stats={financialStats}
-          recentPayments={recentPayments}
-          revenueData={revenueData}
-          hourlyTraffic={hourlyTraffic}
         />
       </div>
 

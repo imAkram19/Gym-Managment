@@ -7,7 +7,7 @@ import {
     CalendarCheck,
     X,
     Dumbbell,
-    Fingerprint,
+    ShieldCheck,
     ChevronLeft
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -25,7 +25,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, 
         { label: 'Members', path: '/members', icon: Users },
         { label: 'Leaderboard', path: '/leaderboard', icon: Trophy },
         { label: 'Attendance', path: '/attendance', icon: CalendarCheck },
-        { label: 'Biometrics', path: '/biometrics', icon: Fingerprint },
+        { label: 'Owner Vault', path: '/vault', icon: ShieldCheck },
     ];
 
     return (

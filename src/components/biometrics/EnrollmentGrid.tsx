@@ -19,7 +19,7 @@ export const EnrollmentGrid: React.FC<EnrollmentGridProps> = ({
   loading = false,
 }) => {
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'synced' | 'needs_enrollment' | 'needs_deletion' | 'deleted'>('all');
+  const [filter, setFilter] = useState<'all' | 'active' | 'expired'>('all');
   const [deleteTarget, setDeleteTarget] = useState<BiometricEnrollmentWithMember | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -28,7 +28,13 @@ export const EnrollmentGrid: React.FC<EnrollmentGridProps> = ({
       const matchesSearch =
         e.memberName.toLowerCase().includes(search.toLowerCase()) ||
         String(e.deviceUserId).includes(search);
-      const matchesFilter = filter === 'all' || (e.syncStatus || 'synced') === filter;
+      
+      let matchesFilter = true;
+      if (filter === 'active') {
+        matchesFilter = e.memberStatus === 'active';
+      } else if (filter === 'expired') {
+        matchesFilter = e.memberStatus !== 'active';
+      }
       return matchesSearch && matchesFilter;
     });
   }, [enrollments, search, filter]);
@@ -65,10 +71,17 @@ export const EnrollmentGrid: React.FC<EnrollmentGridProps> = ({
             value={filter}
             onChange={(val) => setFilter(val as any)}
             options={[
-              { value: 'all', label: 'All Users' },
-              { value: 'synced', label: 'Synced' },
-              { value: 'needs_enrollment', label: 'Needs Enroll' },
-              { value: 'needs_deletion', label: 'Pending Delete' },
+              { value: 'all', label: 'All Enrolled', count: enrollments.length },
+              {
+                value: 'active',
+                label: 'Active Access',
+                count: enrollments.filter((e) => e.memberStatus === 'active').length,
+              },
+              {
+                value: 'expired',
+                label: 'Expired Plans',
+                count: enrollments.filter((e) => e.memberStatus !== 'active').length,
+              },
             ]}
           />
         </div>
@@ -122,13 +135,15 @@ export const EnrollmentGrid: React.FC<EnrollmentGridProps> = ({
                     <span
                       className={clsx(
                         'px-2 py-0.5 rounded text-[10px] font-bold uppercase border',
-                        e.syncStatus === 'synced' && 'bg-emerald-50 text-emerald-700 border-emerald-200',
-                        e.syncStatus === 'needs_enrollment' && 'bg-indigo-50 text-indigo-700 border-indigo-200',
-                        e.syncStatus === 'needs_deletion' && 'bg-amber-50 text-amber-700 border-amber-200',
-                        e.syncStatus === 'deleted' && 'bg-red-50 text-red-700 border-red-200'
+                        e.memberStatus === 'active'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-rose-50 text-rose-700 border-rose-200'
                       )}
                     >
-                      {e.syncStatus || 'synced'}
+                      {e.memberStatus === 'active' ? 'Active' : 'Expired'}
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400">
+                      • {e.syncStatus || 'synced'}
                     </span>
                   </div>
                 </div>

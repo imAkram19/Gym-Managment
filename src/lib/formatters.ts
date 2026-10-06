@@ -44,3 +44,42 @@ export function pluralWord(count: number, singular: string, plural?: string): st
   const rule = enPluralRules.select(count);
   return rule === 'one' ? singular : (plural || `${singular}s`);
 }
+
+/**
+ * Format any time string (HH:MM:SS, HH:MM, or ISO date) to an easy readable 12-hour format:
+ * e.g. "18:43:22" => "6:43 PM", "11:43:00" => "11:43 AM", "23:15" => "11:15 PM"
+ */
+export function formatTime12h(timeStr?: string | null): string {
+  if (!timeStr) return '';
+  const trimmed = String(timeStr).trim();
+  if (!trimmed) return '';
+
+  // Already formatted like "11:43 AM" or "6:43 PM"
+  if (/\b(AM|PM)\b/i.test(trimmed)) {
+    return trimmed.toUpperCase();
+  }
+
+  // Handle ISO string or full datetime
+  if (trimmed.includes('T') || (trimmed.includes('-') && trimmed.includes(':'))) {
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+    }
+  }
+
+  // Handle HH:MM:SS or HH:MM
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (match) {
+    const hours = parseInt(match[1], 10);
+    const minutes = match[2];
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const h12 = hours % 12 || 12;
+    return `${h12}:${minutes} ${period}`;
+  }
+
+  return trimmed;
+}

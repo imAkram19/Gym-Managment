@@ -21,6 +21,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { notify } from '../../lib/toast';
 import { Badge, memberStatusToBadge } from '../ui/Badge';
+import { formatTime12h } from '../../lib/formatters';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { FilterChips } from '../ui/FilterChips';
 import { EmptyState } from '../ui/EmptyState';
@@ -603,7 +604,7 @@ export const MemberDetailSheet: React.FC<MemberDetailSheetProps> = ({
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-slate-500">
-                      {att.checkInTime}
+                      {formatTime12h(att.checkInTime)}
                     </span>
                     <span className="capitalize px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
                       {att.method}

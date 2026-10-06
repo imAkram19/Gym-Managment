@@ -13,6 +13,7 @@ import { EditMemberModal } from '../components/members/EditMemberModal';
 import { ExtendMembershipModal } from '../components/members/ExtendMembershipModal';
 import { DeleteMemberModal } from '../components/members/DeleteMemberModal';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { formatTime12h } from '../lib/formatters';
 import { notify } from '../lib/toast';
 
 const MemberDetail: React.FC = () => {
@@ -601,7 +602,7 @@ const MemberDetail: React.FC = () => {
                             headers={['Date', 'Time', 'Method']}
                             rows={history.attendance.map(att => [
                                 att.date,
-                                att.checkInTime,
+                                formatTime12h(att.checkInTime),
                                 att.method
                             ])}
                         />

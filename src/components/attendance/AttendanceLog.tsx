@@ -3,6 +3,7 @@ import { Search, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { DataTable, type ColumnDef } from '../ui/DataTable';
 import { EmptyState } from '../ui/EmptyState';
+import { formatTime12h } from '../../lib/formatters';
 
 export interface AttendanceRecordItem {
   id: string;
@@ -87,7 +88,7 @@ export const AttendanceLog: React.FC<AttendanceLogProps> = ({
         accessor: (row) => row.checkInTime,
         render: (row) => (
           <span className="font-mono text-xs text-slate-800 font-bold tabular-nums">
-            {row.checkInTime}
+            {formatTime12h(row.checkInTime)}
           </span>
         ),
       },
@@ -173,7 +174,7 @@ export const AttendanceLog: React.FC<AttendanceLogProps> = ({
 
           <div className="shrink-0 text-right">
             <span className="font-mono text-sm font-bold text-slate-900 bg-slate-100/80 px-2.5 py-1 rounded-lg border border-slate-200/80 tabular-nums inline-block">
-              {log.checkInTime}
+              {formatTime12h(log.checkInTime)}
             </span>
           </div>
         </div>

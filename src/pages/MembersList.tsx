@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { Plus, Search, MessageSquare, ExternalLink } from 'lucide-react';
+import { Plus, Search, MessageSquare, ExternalLink, FileSpreadsheet } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AddMemberModal } from '../components/members/AddMemberModal';
+import { ExportMembersModal } from '../components/members/ExportMembersModal';
 import { SlideOver } from '../components/ui/SlideOver';
 import { MemberDetailSheet } from '../components/members/MemberDetailSheet';
 import { DataTable, type ColumnDef } from '../components/ui/DataTable';
@@ -47,6 +48,7 @@ const MembersList: React.FC = () => {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(() => searchParams.get('action') === 'add');
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
   // Extend modal trigger from table shortcut
@@ -524,14 +526,26 @@ const MembersList: React.FC = () => {
             Manage profiles, active subscriptions, and biometrics.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setIsAddModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-all cursor-pointer shadow-sm shadow-blue-500/20 active:scale-[0.98]"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Member</span>
-        </button>
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setIsExportModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 sm:px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold transition-all cursor-pointer shadow-sm shadow-emerald-600/20 active:scale-[0.98] text-sm"
+            title="Export members to Excel (.csv)"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span className="hidden sm:inline">Export to Excel</span>
+            <span className="sm:hidden">Export</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 sm:px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-all cursor-pointer shadow-sm shadow-blue-500/20 active:scale-[0.98] text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Member</span>
+          </button>
+        </div>
       </div>
 
       {/* ── SEARCH & FILTER CONTROLS ── */}
@@ -660,6 +674,12 @@ const MembersList: React.FC = () => {
           setIsAddModalOpen(false);
           fetchMembersData();
         }}
+      />
+
+      {/* ── EXPORT MEMBERS TO EXCEL MODAL ── */}
+      <ExportMembersModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
       />
 
       {/* ── EXTEND MEMBERSHIP MODAL (triggered via 'E' shortcut) ── */}

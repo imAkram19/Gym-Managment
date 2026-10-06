@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, X, Loader2 } from 'lucide-react';
 import { DeviceStatusPanel } from '../components/biometrics/DeviceStatusPanel';
 import { EnrollmentGrid } from '../components/biometrics/EnrollmentGrid';
 import { ScanSimulator } from '../components/biometrics/ScanSimulator';
 import { CheckInFeedback, type CheckInFeedbackData } from '../components/biometrics/CheckInFeedback';
+import { CheckInPanel } from '../components/attendance/CheckInPanel';
+import { OwnerVault } from '../components/vault/OwnerVault';
 import { FilterChips } from '../components/ui/FilterChips';
 import {
   getBiometricDevices,
@@ -20,12 +23,41 @@ import { notify } from '../lib/toast';
 import type { BiometricDevice } from '../types';
 
 const Biometrics: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'enrollments' | 'simulator'>('overview');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') || 'vault';
+  const [activeTab, setActiveTab] = useState<'vault' | 'enrollments' | 'devtools'>(() => {
+    if (initialTab === 'enrollments') return 'enrollments';
+    if (initialTab === 'devtools' || initialTab === 'overview' || initialTab === 'simulator') {
+      return 'devtools';
+    }
+    return 'vault';
+  });
   const [devices, setDevices] = useState<BiometricDevice[]>([]);
   const [enrollments, setEnrollments] = useState<BiometricEnrollmentWithMember[]>([]);
   const [todayScansCount, setTodayScansCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Memoize unique enrolled members for zero-egress manual reception bypass
+  const devCheckInMembers = React.useMemo(() => {
+    const map = new Map<string, { id: string; fullName: string; status?: string }>();
+    for (const e of enrollments) {
+      if (e.memberId && !map.has(e.memberId)) {
+        map.set(e.memberId, {
+          id: e.memberId,
+          fullName: e.memberName,
+          status: e.memberStatus,
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [enrollments]);
+
+  // Sync tab with URL search parameter
+  const handleTabChange = (newTab: 'vault' | 'enrollments' | 'devtools') => {
+    setActiveTab(newTab);
+    setSearchParams({ tab: newTab });
+  };
 
   // Add Device Modal
   const [showAddDevice, setShowAddDevice] = useState(false);
@@ -122,7 +154,7 @@ const Biometrics: React.FC = () => {
     reason?: string;
   }) => {
     const time = new Date().toLocaleTimeString('en-US', {
-      hour: '2-digit',
+      hour: 'numeric',
       minute: '2-digit',
       hour12: true,
     });
@@ -156,64 +188,50 @@ const Biometrics: React.FC = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Biometrics Gateway
+            {activeTab === 'vault' ? 'Owner Vault' : activeTab === 'devtools' ? 'Dev Tools' : 'Enrolled Fingerprints'}
           </h1>
           <p className="text-sm text-slate-500">
-            Hardware terminal monitoring, member fingerprint mapping, and scan simulator.
+            {activeTab === 'vault'
+              ? 'Financial analytics, payment collections, and secure member data exports.'
+              : activeTab === 'devtools'
+              ? 'Terminal hardware connection, socket ping testing, and scan simulator.'
+              : 'Fingerprint mappings, keypad user ID assignments, and membership access.'}
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <FilterChips
-            size="md"
-            value={activeTab}
-            onChange={(val) => setActiveTab(val as any)}
-            options={[
-              { value: 'overview', label: 'Hardware Terminals' },
-              { value: 'enrollments', label: 'Enrolled Users', count: enrollments.length },
-              { value: 'simulator', label: 'Scan Simulator' },
-            ]}
-          />
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <div className="overflow-x-auto pb-1 -mx-1 px-1">
+            <FilterChips
+              size="md"
+              value={activeTab}
+              onChange={(val) => handleTabChange(val as any)}
+              options={[
+                { value: 'vault', label: 'Owner Vault' },
+                { value: 'enrollments', label: 'Enrolled Fingerprints', count: enrollments.length },
+                { value: 'devtools', label: 'Dev Tools' },
+              ]}
+            />
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setShowAddDevice(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all cursor-pointer shadow-sm shadow-blue-500/20"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Add Terminal</span>
-          </button>
+          {activeTab === 'devtools' && (
+            <button
+              type="button"
+              onClick={() => setShowAddDevice(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] rounded-xl transition-all cursor-pointer shadow-sm shadow-blue-500/20 min-h-[38px]"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Add Terminal</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* ── 1. HARDWARE OVERVIEW TAB ── */}
-      {activeTab === 'overview' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {devices.map((device) => (
-              <DeviceStatusPanel
-                key={device.id}
-                device={device}
-                enrolledCount={enrollments.length}
-                todayScansCount={todayScansCount}
-                onRefresh={handleRefreshPing}
-                onDelete={() => handleDeleteDevice(device.id)}
-                isRefreshing={isRefreshing}
-              />
-            ))}
-          </div>
-
-          {/* Quick simulator widget on overview */}
-          <div className="pt-2">
-            <ScanSimulator
-              enrollments={enrollments}
-              onScanSimulated={handleScanSimulated}
-            />
-          </div>
-        </div>
+      {/* ── 0. OWNER VAULT TAB ── */}
+      {activeTab === 'vault' && (
+        <OwnerVault />
       )}
 
-      {/* ── 2. ENROLLED USERS TAB ── */}
+      {/* ── 1. ENROLLED USERS TAB ── */}
       {activeTab === 'enrollments' && (
         <EnrollmentGrid
           enrollments={enrollments}
@@ -222,13 +240,61 @@ const Biometrics: React.FC = () => {
         />
       )}
 
-      {/* ── 3. SIMULATOR TAB ── */}
-      {activeTab === 'simulator' && (
-        <div className="max-w-2xl mx-auto space-y-4">
-          <ScanSimulator
-            enrollments={enrollments}
-            onScanSimulated={handleScanSimulated}
-          />
+      {/* ── 2. DEV TOOLS TAB (MERGED TERMINALS & SCAN SIMULATOR) ── */}
+      {activeTab === 'devtools' && (
+        <div className="space-y-6">
+          {/* Hardware Terminal Status */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 tracking-tight">
+                  Hardware Terminals
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Live connection and socket ping to physical ZKTeco biometric devices.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {devices.map((device) => (
+                <DeviceStatusPanel
+                  key={device.id}
+                  device={device}
+                  enrolledCount={enrollments.length}
+                  todayScansCount={todayScansCount}
+                  onRefresh={handleRefreshPing}
+                  onDelete={() => handleDeleteDevice(device.id)}
+                  isRefreshing={isRefreshing}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Testing & Bypass Tools */}
+          <div className="pt-5 border-t border-slate-200 space-y-4">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 tracking-tight">
+                Simulators & Reception Bypass
+              </h3>
+              <p className="text-xs text-slate-500">
+                Simulate member fingerprint events or record manual reception check-ins if the biometric device is offline.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <ScanSimulator
+                enrollments={enrollments}
+                onScanSimulated={handleScanSimulated}
+              />
+              <CheckInPanel
+                members={devCheckInMembers}
+                onCheckInSuccess={() => {
+                  setTodayScansCount((prev) => prev + 1);
+                }}
+              />
+            </div>
+          </div>
         </div>
       )}
 

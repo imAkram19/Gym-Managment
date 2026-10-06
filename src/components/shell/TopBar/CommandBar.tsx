@@ -8,6 +8,7 @@ import {
   Trophy,
   CalendarCheck,
   Fingerprint,
+  ShieldCheck,
   ArrowRight,
   X,
 } from 'lucide-react';
@@ -140,14 +141,25 @@ export const CommandBar: React.FC<CommandBarProps> = ({
       },
     },
     {
+      id: 'nav-vault',
+      type: 'nav',
+      label: 'Owner Vault (Financials & Exports)',
+      icon: ShieldCheck,
+      category: 'Navigation',
+      handler: () => {
+        onClose();
+        navigate('/vault');
+      },
+    },
+    {
       id: 'nav-biometrics',
       type: 'nav',
-      label: 'Biometrics Terminal Control',
+      label: 'Dev Tools & Hardware Terminals',
       icon: Fingerprint,
       category: 'Navigation',
       handler: () => {
         onClose();
-        navigate('/biometrics');
+        navigate('/vault?tab=devtools');
       },
     },
     {

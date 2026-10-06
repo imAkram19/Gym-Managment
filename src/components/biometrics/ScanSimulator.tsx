@@ -27,7 +27,7 @@ export const ScanSimulator: React.FC<ScanSimulatorProps> = ({
       const now = new Date();
       const todayStr = now.toISOString().split('T')[0];
       const timeStr = now.toLocaleTimeString('en-US', {
-        hour: '2-digit',
+        hour: 'numeric',
         minute: '2-digit',
         hour12: true,
       });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { notify } from '../lib/toast';
+import { formatTime12h } from '../lib/formatters';
 
 export interface LiveCheckInItem {
   id: string;
@@ -54,7 +55,7 @@ export function useLiveCheckIns(limit = 20) {
             memberName: item.members?.full_name || 'Member',
             memberImage: item.members?.image_url,
             date: item.date,
-            checkInTime: item.check_in_time,
+            checkInTime: formatTime12h(item.check_in_time),
             method: item.method || 'fingerprint',
             status: item.members?.status || 'active',
           }));
@@ -116,7 +117,7 @@ export function useLiveCheckIns(limit = 20) {
             memberName,
             memberImage,
             date: newAtt.date,
-            checkInTime: newAtt.check_in_time,
+            checkInTime: formatTime12h(newAtt.check_in_time),
             method: newAtt.method || 'fingerprint',
             status: memberStatus,
           };

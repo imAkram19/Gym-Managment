@@ -2,11 +2,17 @@ import React, { useState } from 'react';
 import { UserCheck, Search, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { notify } from '../../lib/toast';
-import type { Member } from '../../types';
 import { clsx } from 'clsx';
 
+export interface CheckInMemberItem {
+  id: string;
+  fullName: string;
+  phone?: string | null;
+  status?: string;
+}
+
 interface CheckInPanelProps {
-  members: Member[];
+  members: CheckInMemberItem[];
   onCheckInSuccess?: () => void;
 }
 
@@ -107,7 +113,7 @@ export const CheckInPanel: React.FC<CheckInPanelProps> = ({
               <option value="">-- Choose member from list ({filteredMembers.length} available) --</option>
               {filteredMembers.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.fullName} {m.phone ? `(${m.phone})` : ''} — {m.status}
+                  {m.fullName}{m.phone ? ` (${m.phone})` : ''}{m.status ? ` — ${m.status}` : ''}
                 </option>
               ))}
             </select>

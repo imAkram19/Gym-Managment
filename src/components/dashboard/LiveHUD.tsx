@@ -12,7 +12,6 @@ interface LiveHUDProps {
   onExpiringClick?: () => void;
   onActiveClick?: () => void;
   onAttendanceClick?: () => void;
-  onDeviceClick?: () => void;
 }
 
 export const LiveHUD: React.FC<LiveHUDProps> = ({
@@ -23,7 +22,6 @@ export const LiveHUD: React.FC<LiveHUDProps> = ({
   onExpiringClick,
   onActiveClick,
   onAttendanceClick,
-  onDeviceClick,
 }) => {
   const isDeviceOnline = primaryDevice?.status === 'online';
 
@@ -56,13 +54,10 @@ export const LiveHUD: React.FC<LiveHUDProps> = ({
         onClick={onActiveClick}
       />
 
-      {/* 4. Biometric Terminal Status */}
+      {/* 4. Biometric Terminal Status (Informational only, non-clickable) */}
       <div
-        onClick={onDeviceClick}
-        role="button"
-        tabIndex={0}
         aria-label="Biometric device status"
-        className="p-px rounded-2xl bg-slate-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer group active:scale-[0.98]"
+        className="p-px rounded-2xl bg-slate-200/80 shadow-xs"
       >
         <div className="bg-white rounded-[15px] p-5 flex flex-col justify-between h-full">
           <div className="flex items-center justify-between">
@@ -94,10 +89,10 @@ export const LiveHUD: React.FC<LiveHUDProps> = ({
               <span className="text-xl font-bold font-mono text-slate-900 truncate">
                 {primaryDevice?.name || 'ZKTeco K40'}
               </span>
-              <Fingerprint className="w-5 h-5 text-blue-600 opacity-60 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+              <Fingerprint className="w-5 h-5 text-blue-600 opacity-60 flex-shrink-0" />
             </div>
-            <p className="text-xs text-slate-500 font-mono mt-1">
-              {primaryDevice?.ipAddress ? `${primaryDevice.ipAddress}:${primaryDevice.port}` : '192.168.1.201:4370'}
+            <p className="text-xs text-slate-400 mt-1 font-medium">
+              Reception Gateway Terminal
             </p>
           </div>
         </div>

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { CheckCircle2, XCircle, ArrowRight, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { formatTime12h } from '../../lib/formatters';
 
 export type CheckInFeedbackData =
   | {
@@ -99,7 +100,7 @@ export const CheckInFeedback: React.FC<CheckInFeedbackProps> = ({
                   {isSuccess ? 'ACCESS GRANTED' : 'ACCESS DENIED'}
                 </span>
                 <span className="text-[11px] font-mono text-slate-400">
-                  {data.time}
+                  {formatTime12h(data.time)}
                 </span>
               </div>
 

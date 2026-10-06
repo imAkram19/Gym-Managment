@@ -24,6 +24,7 @@ function AppRoutes() {
         <Route path="attendance" element={<Attendance />} />
         <Route path="leaderboard" element={<Leaderboard />} />
         <Route path="biometrics" element={<Biometrics />} />
+        <Route path="vault" element={<Biometrics />} />
       </Route>
     </Routes>
   );

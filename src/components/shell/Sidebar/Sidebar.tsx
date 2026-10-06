@@ -5,7 +5,7 @@ import {
   Users,
   Trophy,
   CalendarCheck,
-  Fingerprint,
+  ShieldCheck,
   Dumbbell,
   ChevronLeft,
   ChevronRight,
@@ -23,7 +23,7 @@ const NAV_ITEMS = [
   { label: 'Members',      path: '/members',      icon: Users },
   { label: 'Leaderboard',  path: '/leaderboard',  icon: Trophy },
   { label: 'Attendance',   path: '/attendance',   icon: CalendarCheck },
-  { label: 'Biometrics',   path: '/biometrics',   icon: Fingerprint },
+  { label: 'Owner Vault',  path: '/vault',        icon: ShieldCheck },
 ] as const;
 
 export const Sidebar: React.FC = () => {
