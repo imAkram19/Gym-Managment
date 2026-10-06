@@ -73,7 +73,7 @@ import { LayoutDashboard, Users, Trophy, CalendarCheck, ShieldCheck } from 'luci
 import { clsx } from 'clsx';
 
 const MOBILE_NAV_ITEMS = [
-  { label: 'Dashboard',     displayLabel: 'Dashboard', path: '/',             icon: LayoutDashboard },
+  { label: 'Dashboard',     displayLabel: 'Dashboard', path: '/dashboard',     icon: LayoutDashboard },
   { label: 'Members',       displayLabel: 'Members',   path: '/members',      icon: Users },
   { label: 'Leaderboard',   displayLabel: 'Board',     path: '/leaderboard',  icon: Trophy },
   { label: 'Attendance',    displayLabel: 'Check-In',  path: '/attendance',   icon: CalendarCheck },
@@ -92,7 +92,7 @@ function MobileBottomNav() {
           <NavLink
             key={item.path}
             to={item.path}
-            end={item.path === '/'}
+            end={item.path === '/dashboard'}
             className={({ isActive }) =>
               clsx(
                 'flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-[var(--radius-md)] text-center min-w-0',

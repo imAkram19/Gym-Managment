@@ -367,3 +367,20 @@ button:active,
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* ── MARQUEE ANIMATION FOR ACHIEVEMENTS ─────────────────────── */
+@keyframes marquee-rtl {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee-rtl {
+  display: flex;
+  width: max-content;
+  animation: marquee-rtl 110s linear infinite;
+  animation-delay: 1.5s;
+}
+
+.animate-marquee-rtl:hover {
+  animation-play-state: paused;
+}

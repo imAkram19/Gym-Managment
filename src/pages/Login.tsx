@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Dumbbell, Lock, User, Eye, EyeOff } from 'lucide-react';
+import { Dumbbell, Lock, User, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 interface LoginProps {
     onLoginSuccess: () => void;
@@ -100,8 +101,15 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 </form>
             </div>
             
-            <div className="text-center mt-6 text-xs text-slate-400 font-medium">
-                Iron Gym Management System
+            <div className="text-center mt-6 flex flex-col items-center gap-2 text-xs text-slate-400 font-medium">
+                <div>Iron Gym Management System</div>
+                <Link
+                    to="/"
+                    className="inline-flex items-center gap-1.5 text-indigo-600 hover:text-indigo-700 font-semibold transition-colors mt-1"
+                >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Back to Public Website</span>
+                </Link>
             </div>
         </div>
     );

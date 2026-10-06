@@ -10,7 +10,9 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Globe,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { NavItem } from './NavItem';
 import { useSidebar } from './SidebarContext';
 
@@ -19,7 +21,7 @@ import { useSidebar } from './SidebarContext';
 // CSS: :root { --sidebar-width: 240px } / [data-sidebar-collapsed] { --sidebar-width: 64px }
 
 const NAV_ITEMS = [
-  { label: 'Dashboard',    path: '/',             icon: LayoutDashboard },
+  { label: 'Dashboard',    path: '/dashboard',    icon: LayoutDashboard },
   { label: 'Members',      path: '/members',      icon: Users },
   { label: 'Leaderboard',  path: '/leaderboard',  icon: Trophy },
   { label: 'Attendance',   path: '/attendance',   icon: CalendarCheck },
@@ -190,12 +192,23 @@ function SidebarContent({ isCollapsed, onToggle, onNavClick, isMobile, onMobileC
         </div>
       )}
 
-      {/* Footer: version */}
-      {!isCollapsed && (
-        <div className="px-5 pb-4 flex-shrink-0">
-          <p className="text-[10px] text-white/25 font-mono">Iron Gym v2.0</p>
-        </div>
-      )}
+      {/* Footer: Public Site & Version */}
+      <div className={clsx('pb-4 flex-shrink-0', isCollapsed ? 'px-2 text-center' : 'px-4')}>
+        <Link
+          to="/"
+          className={clsx(
+            'flex items-center gap-2 py-2 px-2.5 rounded-[var(--radius-sm)] text-xs text-white/70 hover:text-white hover:bg-white/10 transition-colors',
+            isCollapsed && 'justify-center'
+          )}
+          title="View Client Website"
+        >
+          <Globe className="w-4 h-4 text-amber-400 flex-shrink-0" />
+          {!isCollapsed && <span className="font-medium truncate">Client Website</span>}
+        </Link>
+        {!isCollapsed && (
+          <p className="text-[10px] text-white/25 font-mono mt-2 px-2.5">Iron Gym v2.0</p>
+        )}
+      </div>
     </>
   );
 }

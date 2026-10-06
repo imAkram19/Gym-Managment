@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { AppShell } from './components/shell/AppShell';
 import Dashboard from './pages/Dashboard';
 import MembersList from './pages/MembersList';
@@ -8,17 +8,85 @@ import Attendance from './pages/Attendance';
 import Leaderboard from './pages/Leaderboard';
 import Biometrics from './pages/Biometrics';
 import { Login } from './pages/Login';
+import { ClientPortal } from './pages/client/ClientPortal';
 import { notify } from './lib/toast';
 
-// Wire notify factory navigate fn — must be inside Router
-function AppRoutes() {
+interface ProtectedStaffRouteProps {
+  isLoggedIn: boolean;
+  children: React.ReactNode;
+}
+
+function ProtectedStaffRoute({ isLoggedIn, children }: ProtectedStaffRouteProps) {
+  if (!isLoggedIn) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+}
+
+function AppRoutes({
+  isLoggedIn,
+  setIsLoggedIn,
+}: {
+  isLoggedIn: boolean;
+  setIsLoggedIn: (val: boolean) => void;
+}) {
   const navigate = useNavigate();
   notify._setNavigate(navigate);
 
+  const handleLoginSuccess = () => {
+    setIsLoggedIn(true);
+    navigate('/dashboard');
+  };
+
   return (
     <Routes>
-      <Route path="/" element={<AppShell />}>
+      {/* ── Public Client-Facing Portal ─────────────────────────── */}
+      <Route path="/" element={<ClientPortal />} />
+      <Route path="/rank" element={<ClientPortal />} />
+
+      {/* ── Receptionist & Staff Login Gate ────────────────────── */}
+      <Route
+        path="/login"
+        element={
+          isLoggedIn ? (
+            <Navigate to="/dashboard" replace />
+          ) : (
+            <Login onLoginSuccess={handleLoginSuccess} />
+          )
+        }
+      />
+      <Route path="/portal" element={<Navigate to="/login" replace />} />
+      <Route
+        path="/admin"
+        element={
+          isLoggedIn ? (
+            <Navigate to="/dashboard" replace />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+
+      {/* ── Protected Receptionist & Gym Management Operations ── */}
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedStaffRoute isLoggedIn={isLoggedIn}>
+            <AppShell />
+          </ProtectedStaffRoute>
+        }
+      >
         <Route index element={<Dashboard />} />
+      </Route>
+
+      <Route
+        path="/"
+        element={
+          <ProtectedStaffRoute isLoggedIn={isLoggedIn}>
+            <AppShell />
+          </ProtectedStaffRoute>
+        }
+      >
         <Route path="members" element={<MembersList />} />
         <Route path="members/:id" element={<MemberDetail />} />
         <Route path="attendance" element={<Attendance />} />
@@ -26,6 +94,9 @@ function AppRoutes() {
         <Route path="biometrics" element={<Biometrics />} />
         <Route path="vault" element={<Biometrics />} />
       </Route>
+
+      {/* Fallback to home */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
@@ -35,13 +106,9 @@ function App() {
     return sessionStorage.getItem('irongym_logged_in') === 'true';
   });
 
-  if (!isLoggedIn) {
-    return <Login onLoginSuccess={() => setIsLoggedIn(true)} />;
-  }
-
   return (
     <Router>
-      <AppRoutes />
+      <AppRoutes isLoggedIn={isLoggedIn} setIsLoggedIn={setIsLoggedIn} />
     </Router>
   );
 }
