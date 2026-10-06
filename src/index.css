@@ -121,13 +121,15 @@ body {
   overflow: hidden;
 }
 
-/* All inputs: 16px min to prevent iOS zoom on focus */
-input, textarea, select {
-  font-size: 16px;
+/* All inputs: 16px min on mobile to prevent iOS and Android zoom on focus */
+@media (max-width: 767px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
 }
 
 @media (min-width: 768px) {
-  /* Only scale down on desktop where zoom isn't an issue */
+  /* Scale down on desktop where zoom isn't an issue */
   input, textarea, select {
     font-size: 0.875rem;
   }

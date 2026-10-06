@@ -73,11 +73,11 @@ import { LayoutDashboard, Users, Trophy, CalendarCheck, ShieldCheck } from 'luci
 import { clsx } from 'clsx';
 
 const MOBILE_NAV_ITEMS = [
-  { label: 'Dashboard',     path: '/',             icon: LayoutDashboard },
-  { label: 'Members',       path: '/members',      icon: Users },
-  { label: 'Leaderboard',   path: '/leaderboard',  icon: Trophy },
-  { label: 'Attendance',    path: '/attendance',   icon: CalendarCheck },
-  { label: 'Owner Vault',   path: '/vault',        icon: ShieldCheck },
+  { label: 'Dashboard',     displayLabel: 'Dashboard', path: '/',             icon: LayoutDashboard },
+  { label: 'Members',       displayLabel: 'Members',   path: '/members',      icon: Users },
+  { label: 'Leaderboard',   displayLabel: 'Board',     path: '/leaderboard',  icon: Trophy },
+  { label: 'Attendance',    displayLabel: 'Check-In',  path: '/attendance',   icon: CalendarCheck },
+  { label: 'Owner Vault',   displayLabel: 'Vault',     path: '/vault',        icon: ShieldCheck },
 ] as const;
 
 function MobileBottomNav() {
@@ -87,7 +87,7 @@ function MobileBottomNav() {
       aria-label="Mobile navigation"
       role="navigation"
     >
-      <div className="flex items-center justify-around px-2 py-2">
+      <div className="grid grid-cols-5 items-center px-1.5 py-1.5">
         {MOBILE_NAV_ITEMS.map((item) => (
           <NavLink
             key={item.path}
@@ -95,11 +95,11 @@ function MobileBottomNav() {
             end={item.path === '/'}
             className={({ isActive }) =>
               clsx(
-                'flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-[var(--radius-md)]',
+                'flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-[var(--radius-md)] text-center min-w-0',
                 'touch-target transition-colors duration-100',
                 isActive
-                  ? 'text-[var(--accent)]'
-                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
+                  ? 'text-[var(--accent)] font-bold'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium',
               )
             }
             aria-label={item.label}
@@ -107,10 +107,12 @@ function MobileBottomNav() {
             {({ isActive }) => (
               <>
                 <item.icon
-                  className={clsx('w-5 h-5', isActive && 'text-[var(--accent)]')}
+                  className={clsx('w-5 h-5 shrink-0', isActive && 'text-[var(--accent)]')}
                   aria-hidden
                 />
-                <span className="text-[10px] font-semibold">{item.label}</span>
+                <span className="text-[10px] leading-tight tracking-tight whitespace-nowrap truncate max-w-full">
+                  {item.displayLabel}
+                </span>
               </>
             )}
           </NavLink>

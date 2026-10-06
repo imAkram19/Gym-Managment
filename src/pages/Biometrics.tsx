@@ -185,12 +185,12 @@ const Biometrics: React.FC = () => {
       />
 
       {/* ── HEADER ── */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
             {activeTab === 'vault' ? 'Owner Vault' : activeTab === 'devtools' ? 'Dev Tools' : 'Enrolled Fingerprints'}
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5 sm:mt-1">
             {activeTab === 'vault'
               ? 'Financial analytics, payment collections, and secure member data exports.'
               : activeTab === 'devtools'
@@ -199,8 +199,8 @@ const Biometrics: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-          <div className="overflow-x-auto pb-1 -mx-1 px-1">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
+          <div className="overflow-x-auto pb-1 -mx-1 px-1 w-full sm:w-auto">
             <FilterChips
               size="md"
               value={activeTab}

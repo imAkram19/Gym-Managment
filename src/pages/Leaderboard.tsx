@@ -242,124 +242,125 @@ export const Leaderboard: React.FC = () => {
     <>
       {/* ─── KIOSK / RECEPTION TV MODE ─────────────────────────────────── */}
       {isKioskMode && (
-        <div className="fixed inset-0 z-50 bg-slate-950 text-white flex flex-col p-6 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-950 text-white flex flex-col p-3.5 sm:p-6 overflow-y-auto">
           {/* TV Header */}
-          <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
-                <Trophy className="w-6 h-6 text-white" />
+          <div className="flex items-center justify-between border-b border-white/10 pb-3 sm:pb-4 mb-4 sm:mb-6 gap-2">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30 shrink-0">
+                <Trophy className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
               </div>
-              <div>
-                <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
+              <div className="min-w-0">
+                <h1 className="text-base sm:text-2xl font-black tracking-tight text-white flex items-center gap-1.5 sm:gap-2 truncate">
                   IRON GYM <span className="text-amber-400">LEADERBOARD</span>
-                  <Sparkles className="w-5 h-5 text-amber-400 animate-spin" style={{ animationDuration: '6s' }} />
+                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 shrink-0 animate-spin" style={{ animationDuration: '6s' }} />
                 </h1>
-                <p className="text-xs text-slate-400 font-medium">
-                  Live Reception Display • Showing {category === 'streaks' ? 'Daily Workout Streaks' : category === 'monthly' ? 'Monthly Consistency' : category === 'weekly' ? 'Weekly Workouts' : 'All-Time Legends'}
+                <p className="text-[10px] sm:text-xs text-slate-400 font-medium truncate">
+                  Live Reception • {category === 'streaks' ? 'Daily Workout Streaks' : category === 'monthly' ? 'Monthly Consistency' : category === 'weekly' ? 'Weekly Workouts' : 'All-Time Legends'}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2.5 sm:gap-4 shrink-0">
               <div className="text-right">
-                <span className="font-mono text-xl font-bold text-emerald-400 tracking-wider">
+                <span className="font-mono text-sm sm:text-xl font-bold text-emerald-400 tracking-wider">
                   {currentTime}
                 </span>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest">
+                <p className="hidden sm:block text-[10px] text-slate-400 uppercase tracking-widest">
                   Live Reception Desk
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsKioskMode(false)}
-                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                className="p-2 sm:p-2.5 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
                 title="Exit TV Mode (Esc)"
               >
-                <Minimize2 className="w-5 h-5" />
+                <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="hidden sm:inline">Exit</span>
               </button>
             </div>
           </div>
 
           {/* TV Mode Podium */}
           {topThree.length >= 3 && (
-            <div className="grid grid-cols-3 gap-6 max-w-5xl mx-auto w-full mb-8 items-end pt-4">
-              {/* Rank 2 (Silver) */}
-              <div className="bg-slate-900/90 border border-slate-700/80 rounded-2xl p-5 text-center flex flex-col items-center shadow-xl relative order-1">
-                <div className="absolute -top-4 w-9 h-9 rounded-full bg-slate-300 text-slate-900 font-black text-sm flex items-center justify-center ring-4 ring-slate-900 shadow-md">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 max-w-5xl mx-auto w-full mb-6 sm:mb-8 items-end pt-2 sm:pt-4">
+              {/* Rank 2 (Silver) - order-2 on mobile, order-1 on desktop */}
+              <div className="bg-slate-900/90 border border-slate-700/80 rounded-2xl p-4 sm:p-5 text-center flex flex-col items-center shadow-xl relative order-2 sm:order-1">
+                <div className="absolute -top-3 sm:-top-4 w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-slate-300 text-slate-900 font-black text-xs sm:text-sm flex items-center justify-center ring-4 ring-slate-900 shadow-md">
                   2
                 </div>
-                <div className="w-16 h-16 rounded-full bg-slate-800 text-slate-300 font-black text-xl flex items-center justify-center mb-3 overflow-hidden ring-4 ring-slate-400/40">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-slate-800 text-slate-300 font-black text-lg sm:text-xl flex items-center justify-center mb-2.5 sm:mb-3 overflow-hidden ring-4 ring-slate-400/40">
                   {topThree[1].imageUrl ? (
                     <img src={topThree[1].imageUrl} alt={topThree[1].fullName} className="w-full h-full object-cover" />
                   ) : (
                     topThree[1].fullName.charAt(0).toUpperCase()
                   )}
                 </div>
-                <h3 className="font-bold text-lg text-white truncate max-w-[200px]">
+                <h3 className="font-bold text-base sm:text-lg text-white truncate max-w-[240px] sm:max-w-[200px]">
                   {topThree[1].fullName}
                 </h3>
-                <div className="mt-2 text-sm font-mono font-bold text-slate-300">
+                <div className="mt-1 sm:mt-2 text-xs sm:text-sm font-mono font-bold text-slate-300">
                   {category === 'streaks' && `🔥 ${topThree[1].currentStreak}d Streak`}
                   {category === 'monthly' && `🏆 ${topThree[1].visitsThisMonth} Visits`}
                   {category === 'weekly' && `⚡ ${topThree[1].visitsThisWeek} This Week`}
                   {category === 'allTime' && `👑 ${topThree[1].totalVisits} Total`}
                 </div>
-                <span className="text-xs text-slate-400 mt-1">
+                <span className="text-[11px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1">
                   {topThree[1].totalVisits} lifetime sessions
                 </span>
               </div>
 
-              {/* Rank 1 (Gold - Elevated) */}
-              <div className="bg-gradient-to-b from-amber-500/20 via-slate-900 to-slate-900 border-2 border-amber-400 rounded-3xl p-6 text-center flex flex-col items-center shadow-2xl relative order-2 pb-8 transform -translate-y-4">
-                <div className="absolute -top-6 w-12 h-12 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-amber-950 font-black text-lg flex items-center justify-center ring-4 ring-slate-950 shadow-xl">
+              {/* Rank 1 (Gold - Elevated) - order-1 on mobile (top of phone stack), order-2 on desktop */}
+              <div className="bg-gradient-to-b from-amber-500/20 via-slate-900 to-slate-900 border-2 border-amber-400 rounded-2xl sm:rounded-3xl p-5 sm:p-6 text-center flex flex-col items-center shadow-2xl relative order-1 sm:order-2 pb-6 sm:pb-8 sm:transform sm:-translate-y-4">
+                <div className="absolute -top-4 sm:-top-6 w-9 h-9 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-amber-950 font-black text-sm sm:text-lg flex items-center justify-center ring-4 ring-slate-950 shadow-xl">
                   👑
                 </div>
-                <div className="w-20 h-20 rounded-full bg-amber-400/20 text-amber-400 font-black text-2xl flex items-center justify-center mb-3 overflow-hidden ring-4 ring-amber-400/60 shadow-lg shadow-amber-400/20">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-amber-400/20 text-amber-400 font-black text-xl sm:text-2xl flex items-center justify-center mb-2.5 sm:mb-3 overflow-hidden ring-4 ring-amber-400/60 shadow-lg shadow-amber-400/20">
                   {topThree[0].imageUrl ? (
                     <img src={topThree[0].imageUrl} alt={topThree[0].fullName} className="w-full h-full object-cover" />
                   ) : (
                     topThree[0].fullName.charAt(0).toUpperCase()
                   )}
                 </div>
-                <span className="px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400 text-slate-950 mb-1">
+                <span className="px-2.5 sm:px-3 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider bg-amber-400 text-slate-950 mb-1">
                   #1 Grand Champion
                 </span>
-                <h3 className="font-black text-xl text-white truncate max-w-[220px]">
+                <h3 className="font-black text-lg sm:text-xl text-white truncate max-w-[260px] sm:max-w-[220px]">
                   {topThree[0].fullName}
                 </h3>
-                <div className="mt-2 text-lg font-mono font-black text-amber-400">
+                <div className="mt-1.5 sm:mt-2 text-base sm:text-lg font-mono font-black text-amber-400">
                   {category === 'streaks' && `🔥 ${topThree[0].currentStreak}d Streak`}
                   {category === 'monthly' && `🏆 ${topThree[0].visitsThisMonth} Visits`}
                   {category === 'weekly' && `⚡ ${topThree[0].visitsThisWeek} This Week`}
                   {category === 'allTime' && `👑 ${topThree[0].totalVisits} Total`}
                 </div>
-                <span className="text-xs text-slate-400 mt-1">
+                <span className="text-[11px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1">
                   {topThree[0].totalVisits} lifetime sessions
                 </span>
               </div>
 
-              {/* Rank 3 (Bronze) */}
-              <div className="bg-slate-900/90 border border-amber-700/60 rounded-2xl p-5 text-center flex flex-col items-center shadow-xl relative order-3">
-                <div className="absolute -top-4 w-9 h-9 rounded-full bg-amber-700 text-amber-100 font-black text-sm flex items-center justify-center ring-4 ring-slate-900 shadow-md">
+              {/* Rank 3 (Bronze) - order-3 on both mobile and desktop */}
+              <div className="bg-slate-900/90 border border-amber-700/60 rounded-2xl p-4 sm:p-5 text-center flex flex-col items-center shadow-xl relative order-3">
+                <div className="absolute -top-3 sm:-top-4 w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-amber-700 text-amber-100 font-black text-xs sm:text-sm flex items-center justify-center ring-4 ring-slate-900 shadow-md">
                   3
                 </div>
-                <div className="w-16 h-16 rounded-full bg-slate-800 text-amber-600 font-black text-xl flex items-center justify-center mb-3 overflow-hidden ring-4 ring-amber-700/40">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-slate-800 text-amber-600 font-black text-lg sm:text-xl flex items-center justify-center mb-2.5 sm:mb-3 overflow-hidden ring-4 ring-amber-700/40">
                   {topThree[2].imageUrl ? (
                     <img src={topThree[2].imageUrl} alt={topThree[2].fullName} className="w-full h-full object-cover" />
                   ) : (
                     topThree[2].fullName.charAt(0).toUpperCase()
                   )}
                 </div>
-                <h3 className="font-bold text-lg text-white truncate max-w-[200px]">
+                <h3 className="font-bold text-base sm:text-lg text-white truncate max-w-[240px] sm:max-w-[200px]">
                   {topThree[2].fullName}
                 </h3>
-                <div className="mt-2 text-sm font-mono font-bold text-amber-300">
+                <div className="mt-1 sm:mt-2 text-xs sm:text-sm font-mono font-bold text-amber-300">
                   {category === 'streaks' && `🔥 ${topThree[2].currentStreak}d Streak`}
                   {category === 'monthly' && `🏆 ${topThree[2].visitsThisMonth} Visits`}
                   {category === 'weekly' && `⚡ ${topThree[2].visitsThisWeek} This Week`}
                   {category === 'allTime' && `👑 ${topThree[2].totalVisits} Total`}
                 </div>
-                <span className="text-xs text-slate-400 mt-1">
+                <span className="text-[11px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1">
                   {topThree[2].totalVisits} lifetime sessions
                 </span>
               </div>
@@ -368,14 +369,14 @@ export const Leaderboard: React.FC = () => {
 
           {/* TV Mode Grid for Ranks 4-12 */}
           <div className="max-w-5xl mx-auto w-full flex-1">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+            <h4 className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 sm:mb-3">
               Top Ranked Athletes
             </h4>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-3">
               {filteredMetrics.slice(3, 12).map((m, idx) => (
                 <div
                   key={m.memberId}
-                  className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex items-center justify-between"
+                  className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-2"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <span className="w-6 h-6 rounded-full bg-slate-800 text-slate-400 text-xs font-bold font-mono flex items-center justify-center shrink-0">
@@ -390,7 +391,7 @@ export const Leaderboard: React.FC = () => {
                       </p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <span className="text-xs font-bold font-mono text-emerald-400">
                       {category === 'streaks' && `${m.currentStreak}d`}
                       {category === 'monthly' && `${m.visitsThisMonth} visits`}

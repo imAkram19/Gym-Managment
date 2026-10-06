@@ -77,32 +77,32 @@ export const StatCard: React.FC<StatCardProps> = ({
     >
       {/* Inner core: pure white with top-highlight */}
       <div
-        className="rounded-[calc(var(--radius-xl)-1px)] bg-white p-5 overflow-hidden"
+        className="rounded-[calc(var(--radius-xl)-1px)] bg-white p-3.5 sm:p-5 overflow-hidden"
         style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9)' }}
         aria-busy={isLoading}
       >
         {isLoading ? (
           <StatCardSkeleton />
         ) : (
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start justify-between gap-2.5 sm:gap-4">
             {/* Left: label + value + delta */}
             <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-2">
+              <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-1.5 sm:mb-2 truncate">
                 {label}
               </p>
               <p className={clsx(
-                'text-[2rem] font-bold leading-none tracking-tight numeric text-[var(--text-primary)]',
+                'text-lg sm:text-[1.85rem] font-bold leading-tight tracking-tight numeric text-[var(--text-primary)] truncate',
                 isMonetary && 'font-mono',
               )}>
                 {formatValue(value, isMonetary)}
               </p>
               {delta && (
-                <div className="flex items-center gap-1 mt-2">
+                <div className="flex items-center gap-1 mt-1.5 sm:mt-2">
                   {isPositive && <TrendingUp className="w-3 h-3 text-[var(--status-active)]" aria-hidden />}
                   {isNegative && <TrendingDown className="w-3 h-3 text-[var(--danger)]" aria-hidden />}
                   {!isPositive && !isNegative && <Minus className="w-3 h-3 text-[var(--text-muted)]" aria-hidden />}
                   <span className={clsx(
-                    'text-[11px] font-semibold',
+                    'text-[10px] sm:text-[11px] font-semibold truncate',
                     isPositive && 'text-[var(--status-active)]',
                     isNegative && 'text-[var(--danger)]',
                     !isPositive && !isNegative && 'text-[var(--text-muted)]',
@@ -115,11 +115,11 @@ export const StatCard: React.FC<StatCardProps> = ({
 
             {/* Right: icon box */}
             <div className={clsx(
-              'w-10 h-10 rounded-[var(--radius-md)] flex-shrink-0',
+              'w-8 h-8 sm:w-10 sm:h-10 rounded-[var(--radius-md)] flex-shrink-0',
               'flex items-center justify-center',
               accent.iconBg,
             )}>
-              <Icon className={clsx('w-5 h-5', accent.iconText)} aria-hidden />
+              <Icon className={clsx('w-4 h-4 sm:w-5 sm:h-5', accent.iconText)} aria-hidden />
             </div>
           </div>
         )}

@@ -60,7 +60,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
                                 placeholder="Enter Username"
-                                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all placeholder-slate-400 text-sm font-medium"
+                                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all placeholder-slate-400 text-base font-medium"
                             />
                         </div>
                     </div>
@@ -77,7 +77,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 placeholder="Enter Password"
-                                className="w-full pl-9 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all placeholder-slate-400 text-sm font-medium"
+                                className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all placeholder-slate-400 text-base font-medium"
                             />
                             <button
                                 type="button"
