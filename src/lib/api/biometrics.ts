@@ -12,6 +12,61 @@ const mapDevice = (data: any): BiometricDevice => ({
     createdAt: data.created_at
 });
 
+// Offline staleness threshold (10 minutes)
+export const OFFLINE_STALE_THRESHOLD_MS = 10 * 60 * 1000;
+
+export function isBiometricDeviceOnline(device?: BiometricDevice | null): boolean {
+    if (!device) return false;
+    if (device.status === 'offline') return false;
+    if (!device.lastPing) return false;
+    const elapsed = Date.now() - new Date(device.lastPing).getTime();
+    return elapsed >= 0 && elapsed <= OFFLINE_STALE_THRESHOLD_MS;
+}
+
+export function formatLastPing(lastPing: string | undefined): string {
+    if (!lastPing) return 'Never';
+    const diffMs = Date.now() - new Date(lastPing).getTime();
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    return `${Math.floor(mins / 60)}h ago`;
+}
+
+export function getDeduplicatedDevices(devices: BiometricDevice[]): {
+    uniqueDevices: BiometricDevice[];
+    primaryDevice: BiometricDevice | null;
+    isPrimaryOnline: boolean;
+    offlineCount: number;
+} {
+    const uniqueDevicesMap = new Map<string, BiometricDevice>();
+    for (const d of devices) {
+        const key = `${d.name}-${d.ipAddress}-${d.port}`;
+        const existing = uniqueDevicesMap.get(key);
+        if (!existing) {
+            uniqueDevicesMap.set(key, d);
+        } else {
+            const newTime = d.lastPing ? new Date(d.lastPing).getTime() : 0;
+            const existTime = existing.lastPing ? new Date(existing.lastPing).getTime() : 0;
+            if (d.status === 'online' && existing.status !== 'online') {
+                uniqueDevicesMap.set(key, d);
+            } else if (newTime > existTime) {
+                uniqueDevicesMap.set(key, d);
+            }
+        }
+    }
+    const uniqueDevices = Array.from(uniqueDevicesMap.values());
+    const offlineDevices = uniqueDevices.filter(d => !isBiometricDeviceOnline(d));
+    const primaryDevice = uniqueDevices.find(d => isBiometricDeviceOnline(d)) ?? uniqueDevices[0] ?? null;
+    const isPrimaryOnline = isBiometricDeviceOnline(primaryDevice);
+
+    return {
+        uniqueDevices,
+        primaryDevice,
+        isPrimaryOnline,
+        offlineCount: offlineDevices.length,
+    };
+}
+
 // Fetch all registered biometric devices
 export const getBiometricDevices = async (): Promise<BiometricDevice[]> => {
     const { data, error } = await supabase

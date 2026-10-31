@@ -5,9 +5,8 @@ import { LiveCheckInFeed } from '../components/dashboard/LiveCheckInFeed';
 import { SlideOver } from '../components/ui/SlideOver';
 import { MemberDetailSheet } from '../components/members/MemberDetailSheet';
 import { useLiveCheckIns } from '../hooks/useLiveCheckIns';
-import { getBiometricDevices } from '../lib/api/biometrics';
+import { useBiometricDeviceStatus } from '../hooks/useBiometricDeviceStatus';
 import { getDashboardStats } from '../lib/api/dashboard';
-import type { BiometricDevice } from '../types';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -15,8 +14,10 @@ const Dashboard: React.FC = () => {
   // Reception Real-Time Check-In Feed (WebSocket, zero polling)
   const { checkIns, isLoading: isFeedLoading } = useLiveCheckIns(20);
 
-  // Top reception devices & stats
-  const [primaryDevice, setPrimaryDevice] = useState<BiometricDevice | null>(null);
+  // Unified biometric device status (real-time + deduplicated + staleness-aware)
+  const { primaryDevice, isPrimaryOnline } = useBiometricDeviceStatus();
+
+  // Dashboard stats
   const [activeMembersCount, setActiveMembersCount] = useState<number>(0);
   const [expiringSoonCount, setExpiringSoonCount] = useState<number>(0);
 
@@ -26,17 +27,11 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     let isMounted = true;
 
-    const loadInitialDashboard = async () => {
+    const loadInitialStats = async () => {
       try {
-        const [devices, stats] = await Promise.all([
-          getBiometricDevices(),
-          getDashboardStats(),
-        ]);
+        const stats = await getDashboardStats();
 
         if (isMounted) {
-          if (devices && devices.length > 0) {
-            setPrimaryDevice(devices[0]);
-          }
           setActiveMembersCount(stats.activeMembers || 0);
           setExpiringSoonCount(stats.expiringSoon || 0);
         }
@@ -45,7 +40,7 @@ const Dashboard: React.FC = () => {
       }
     };
 
-    loadInitialDashboard();
+    loadInitialStats();
 
     return () => {
       isMounted = false;
@@ -70,6 +65,7 @@ const Dashboard: React.FC = () => {
           expiringSoonCount={expiringSoonCount}
           activeMembersCount={activeMembersCount}
           primaryDevice={primaryDevice}
+          isDeviceOnline={isPrimaryOnline}
           onAttendanceClick={() => navigate('/attendance')}
           onExpiringClick={() => navigate('/members?filter=expiring')}
           onActiveClick={() => navigate('/members?filter=active')}

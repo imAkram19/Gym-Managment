@@ -141,7 +141,7 @@ export const GYM_DETAILS = {
   name: 'IRON GYM',
   ownerName: 'Waheed Khan',
   ownerTitle: 'Mr. South India · Multi-Time Mr. Telangana',
-  tagline: 'Built by Champions. Forged in Iron.',
+  tagline: 'Built by Champions. Hardened in Iron.',
   address: 'Max, Pochamma Maidan, Venu Rao Colony, Sherpura, Warangal, Telangana 506002',
   phone: '+919876543210',
   phoneDisplay: '+91 98765 43210',

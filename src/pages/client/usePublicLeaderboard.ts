@@ -146,8 +146,8 @@ const FALLBACK_ATHLETES: MemberAttendanceStat[] = [
 ];
 
 export function usePublicLeaderboard() {
-  const [data, setData] = useState<MemberAttendanceStat[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<MemberAttendanceStat[]>(FALLBACK_ATHLETES);
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'streaks' | 'monthly' | 'total'>('streaks');
 

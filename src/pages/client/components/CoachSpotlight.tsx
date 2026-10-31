@@ -1,137 +1,110 @@
 import React from 'react';
-import { Trophy, Award, Crown, Quote, Flame, MessageCircle } from 'lucide-react';
+import { Award, ShieldCheck, Flame, Users, MessageCircle, ArrowRight } from 'lucide-react';
 import { GYM_DETAILS } from '../clientData';
 
 export const CoachSpotlight: React.FC = () => {
   const coachWhatsAppUrl = `https://wa.me/${GYM_DETAILS.phone.replace('+', '')}?text=${encodeURIComponent(GYM_DETAILS.whatsappCoachMessage)}`;
 
-  return (
-    <section id="coach" className="pt-4 pb-12 sm:py-20 bg-slate-50/70 relative overflow-hidden border-t border-slate-200/80 font-sans">
-      <div className="absolute top-1/2 left-0 w-96 h-96 bg-blue-100/50 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-10 right-0 w-96 h-96 bg-amber-100/50 rounded-full blur-[140px] pointer-events-none" />
+  const pillars = [
+    {
+      title: 'Biomechanical Form',
+      desc: 'Joint-sparing lifting technique and strict progressive overload protocols to build lasting muscle without chronic injury.',
+      icon: ShieldCheck,
+    },
+    {
+      title: '8x Gold Championship Career',
+      desc: 'Proven contest-stage pedigree from Mr. Warangal in 2008 through the 2026 Shafi Sami Classic.',
+      icon: Award,
+    },
+    {
+      title: 'Real Nutrition Guidance',
+      desc: 'Targeted caloric splits, clean protein requirements, and sustainable meal timing without extreme gimmick starvation diets.',
+      icon: Flame,
+    },
+    {
+      title: 'Direct Floor Mentorship',
+      desc: 'Coach Waheed is personally present on the gym floor during morning and evening sessions to spot lifts and correct posture.',
+      icon: Users,
+    },
+  ];
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        {/* Section Heading */}
-        <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-14">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-[11px] font-semibold mb-2 sm:mb-3">
-            <Crown className="w-3.5 h-3.5 text-blue-600" />
-            <span>FOUNDER & MASTER COACH</span>
+  return (
+    <section id="coach" className="py-10 sm:py-24 bg-white border-b border-slate-200/80 font-sans">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        {/* Section Header */}
+        <div className="max-w-xl mb-8 sm:mb-12">
+          <div className="text-[10px] sm:text-xs font-mono text-slate-500 uppercase tracking-wider mb-1.5 sm:mb-2">
+            Head Coach & Mentorship
           </div>
-          <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tight uppercase">
-            Meet Coach <span className="text-blue-600">Waheed Khan</span>
+          <h2 className="text-xl sm:text-4xl font-medium tracking-tight text-slate-900 leading-tight">
+            Coaching anchored in 18 years of stage discipline.
           </h2>
-          <p className="mt-1.5 text-slate-600 text-xs sm:text-sm">
-            Mr. South India · Multi-Time Mr. Telangana · 18+ Years of Stage Dominance
+          <p className="mt-1.5 text-xs sm:text-sm text-slate-600 leading-relaxed font-normal">
+            At Iron Gym, you train under direct supervision from Mr. South India Waheed Khan. No junior interns, no algorithm routines.
           </p>
         </div>
 
-        {/* Coach Profile Card Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-10 items-center max-w-6xl mx-auto">
-          {/* Coach Photo Column */}
-          <div className="lg:col-span-5 flex justify-center">
-            <div className="relative group w-full max-w-md">
-              <div className="absolute -inset-1 rounded-3xl bg-gradient-to-tr from-blue-500/20 via-amber-400/20 to-blue-600/20 opacity-60 group-hover:opacity-100 blur-md transition-all duration-500" />
-              
-              <div className="relative rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-lg">
-                <img
-                  src="/coach-hero.jpg"
-                  alt="Coach Waheed Khan - Iron Gym Founder"
-                  className="w-full h-[320px] sm:h-[480px] object-cover object-center group-hover:scale-105 transition-transform duration-700 ease-out"
-                />
-
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/30 to-transparent pointer-events-none" />
-
-                <div className="absolute bottom-4 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-6 text-white">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className="px-2 py-0.5 rounded bg-amber-500 text-slate-950 text-[10px] font-black uppercase tracking-wider">
-                      Master Coach
-                    </span>
-                    <span className="px-2 py-0.5 rounded bg-white/20 border border-white/30 text-white text-[10px] font-semibold backdrop-blur-md">
-                      Mr. South India
-                    </span>
-                  </div>
-                  <h3 className="text-xl sm:text-2xl font-black text-white uppercase tracking-tight">
-                    Waheed Khan
-                  </h3>
-                  <p className="text-[11px] text-amber-300 font-medium">
-                    Founder & Head Coach · Iron Gym Warangal
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Coach Story & Credentials Column */}
-          <div className="lg:col-span-7 space-y-4 sm:space-y-6">
-            {/* Short & Punchy Quote block */}
-            <div className="p-4 sm:p-6 rounded-2xl bg-white border border-slate-200/90 shadow-sm">
-              <Quote className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500/30 mb-1" />
-              <p className="text-slate-800 text-sm sm:text-base font-medium italic leading-relaxed">
-                “The barbell respects only consistency and discipline. We don’t just train bodies — we forge character.”
-              </p>
-              <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
-                <span className="font-bold text-slate-900">— Waheed Khan</span>
-                <span className="text-slate-500 text-[11px]">Founder, Iron Gym</span>
-              </div>
-            </div>
-
-            {/* Core Coaching Pillars */}
-            <div className="grid grid-cols-2 gap-2 sm:gap-3">
-              <div className="p-3 sm:p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-sm">
-                <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center mb-1.5">
-                  <Trophy className="w-3.5 h-3.5" />
-                </div>
-                <h4 className="text-xs sm:text-sm font-bold text-slate-900">8x Gold Titles</h4>
-                <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 line-clamp-2">
-                  From Mr. Warangal to 2026 Shafi Sami Classic.
-                </p>
-              </div>
-
-              <div className="p-3 sm:p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-sm">
-                <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center mb-1.5">
-                  <Award className="w-3.5 h-3.5" />
-                </div>
-                <h4 className="text-xs sm:text-sm font-bold text-slate-900">Biomechanical Form</h4>
-                <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 line-clamp-2">
-                  Injury-free progressive overload science.
-                </p>
-              </div>
-
-              <div className="p-3 sm:p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-sm">
-                <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center mb-1.5">
-                  <Flame className="w-3.5 h-3.5" />
-                </div>
-                <h4 className="text-xs sm:text-sm font-bold text-slate-900">Custom Nutrition</h4>
-                <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 line-clamp-2">
-                  Targeted caloric & macro meal roadmaps.
-                </p>
-              </div>
-
-              <div className="p-3 sm:p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-sm">
-                <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center mb-1.5">
-                  <Crown className="w-3.5 h-3.5" />
-                </div>
-                <h4 className="text-xs sm:text-sm font-bold text-slate-900">Floor Mentorship</h4>
-                <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 line-clamp-2">
-                  Direct hands-on guidance on the floor.
-                </p>
-              </div>
-            </div>
-
-            {/* Quick WhatsApp Consultation CTA */}
-            <div className="pt-1">
-              <a
-                href={coachWhatsAppUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-sm active:scale-[0.98]"
-              >
-                <MessageCircle className="w-4 h-4 fill-current" />
-                <span>Consult With Coach Waheed on WhatsApp</span>
-              </a>
-            </div>
+        {/* Coach Quote & Philosophy */}
+        <div className="mb-8 sm:mb-12 p-4 sm:p-8 rounded-xl bg-slate-50 border border-slate-200/90">
+          <p className="text-sm sm:text-lg text-slate-800 font-normal leading-relaxed">
+            “The barbell is the ultimate truth-teller. It does not care about trends or excuses. If you show up every day with humility and focus, physical strength and mental resilience inevitably follow.”
+          </p>
+          <div className="mt-3.5 pt-3.5 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
+            <span className="font-medium text-slate-900">Waheed Khan — Founder & Master Coach</span>
+            <span className="text-[11px] sm:text-xs text-slate-500">Mr. South India · Multi-time Mr. Telangana</span>
           </div>
         </div>
+
+        {/* 4 Pillars Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6 mb-8 sm:mb-10">
+          {pillars.map((item, idx) => {
+            const Icon = item.icon;
+            return (
+              <div
+                key={idx}
+                className="p-4 sm:p-6 rounded-xl bg-white border border-slate-200/90 hover:border-slate-300 transition-colors"
+              >
+                <div className="flex items-start gap-3 sm:gap-4">
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 flex-shrink-0 mt-0.5">
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs sm:text-sm font-medium text-slate-900 tracking-normal mb-0.5 sm:mb-1">
+                      {item.title}
+                    </h3>
+                    <p className="text-[11px] sm:text-xs text-slate-600 leading-relaxed font-normal">
+                      {item.desc}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Direct Action Link on Mobile: Full-width button with 44px touch height */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-5 rounded-xl bg-slate-900 text-white">
+          <div>
+            <div className="text-xs sm:text-sm font-medium text-white">
+              Want 1-on-1 personal guidance or contest preparation?
+            </div>
+            <div className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
+              Discuss your fitness goals directly with Coach Waheed Khan on WhatsApp.
+            </div>
+          </div>
+          <a
+            href={coachWhatsAppUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full sm:w-auto h-11 sm:h-10 px-4 rounded-lg bg-white hover:bg-slate-100 text-slate-900 text-xs font-medium inline-flex items-center justify-center gap-2 active:scale-[0.98] transition-transform flex-shrink-0 shadow-xs"
+          >
+            <MessageCircle className="w-4 h-4" />
+            <span>Consult Coach on WhatsApp</span>
+            <ArrowRight className="w-3.5 h-3.5 text-slate-500" />
+          </a>
+        </div>
+
       </div>
     </section>
   );

@@ -1,72 +1,72 @@
 import React from 'react';
-import { Dumbbell, Fingerprint, Award, Flame } from 'lucide-react';
+import { Dumbbell, Fingerprint, Award, Activity } from 'lucide-react';
 
 export const GymFeatures: React.FC = () => {
   const pillars = [
     {
       icon: Dumbbell,
       title: 'Heavy Iron',
-      desc: 'Olympic power racks & heavy dumbbells to 50kg+.',
+      desc: 'Olympic power racks, calibrated plates, and dumbbells past 50kg.',
     },
     {
       icon: Fingerprint,
-      title: 'Smart Access',
-      desc: 'Rapid biometric scan. Zero front-desk wait time.',
+      title: 'Biometric Access',
+      desc: 'Rapid turnstile check-in with zero front-desk waiting lines.',
     },
     {
       icon: Award,
-      title: 'Champion Coach',
-      desc: 'Direct mentorship & form checks from Mr. South India.',
+      title: 'Coach Mentorship',
+      desc: 'Direct lifting adjustments from Mr. South India Waheed Khan.',
     },
     {
-      icon: Flame,
-      title: 'Leaderboard',
-      desc: 'Real-time workout streaks & live athlete rankings.',
+      icon: Activity,
+      title: 'Streak Tracking',
+      desc: 'Automated workout attendance and monthly streak syncing.',
     },
   ];
 
   return (
-    <section id="legacy" className="py-10 sm:py-20 bg-white relative border-t border-slate-200/80 font-sans">
+    <section id="legacy" className="py-10 sm:py-24 bg-[#fafafa] border-b border-slate-200/80 font-sans">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-xl mx-auto mb-6 sm:mb-12">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-[11px] sm:text-xs font-semibold mb-2 sm:mb-3">
-            <Dumbbell className="w-3.5 h-3.5 text-blue-600" />
-            <span>THE IRON ADVANTAGE</span>
+        
+        {/* Section Header */}
+        <div className="max-w-xl mb-8 sm:mb-12">
+          <div className="text-[10px] sm:text-xs font-mono text-slate-500 uppercase tracking-wider mb-1.5 sm:mb-2">
+            Facility & Equipment
           </div>
-          <h2 className="text-2xl sm:text-4xl font-black text-slate-900 tracking-tight uppercase">
-            Why Choose <span className="text-blue-600">Iron Gym</span>
+          <h2 className="text-xl sm:text-4xl font-medium tracking-tight text-slate-900 leading-tight">
+            Heavy iron paired with automated access.
           </h2>
-          <p className="mt-1 text-slate-600 text-xs sm:text-sm">
-            Old-school heavy iron paired with modern biometric tech.
+          <p className="mt-1.5 text-xs sm:text-sm text-slate-600 leading-relaxed font-normal">
+            Equipped for heavy progressive overload and friction-free daily check-ins.
           </p>
         </div>
 
-        {/* 2 per row on Mobile, 4 on Desktop — Icon & Heading strictly on ONE line */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-5">
+        {/* 2x2 Grid on Mobile, 4-Col on Desktop */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-6">
           {pillars.map((item, idx) => {
             const Icon = item.icon;
             return (
               <div
                 key={idx}
-                className="p-3 sm:p-5 rounded-2xl bg-white border border-slate-200 hover:border-blue-400 hover:shadow-sm transition-all flex flex-col justify-between"
+                className="p-3.5 sm:p-6 rounded-xl bg-white border border-slate-200/90 hover:border-slate-300 transition-colors flex flex-col justify-between"
               >
-                {/* Icon & Heading strictly in ONE line */}
-                <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2 min-w-0">
-                  <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 flex-shrink-0">
+                <div>
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 mb-2.5 sm:mb-4">
                     <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </div>
-                  <h3 className="text-[11px] sm:text-xs md:text-sm font-black text-slate-900 uppercase tracking-tight truncate whitespace-nowrap">
+                  <h3 className="text-xs sm:text-sm font-medium text-slate-900 tracking-tight mb-1 sm:mb-2">
                     {item.title}
                   </h3>
+                  <p className="text-[11px] sm:text-xs text-slate-600 leading-relaxed font-normal">
+                    {item.desc}
+                  </p>
                 </div>
-
-                <p className="text-[10px] sm:text-xs text-slate-600 leading-relaxed font-normal">
-                  {item.desc}
-                </p>
               </div>
             );
           })}
         </div>
+
       </div>
     </section>
   );

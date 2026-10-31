@@ -1,5 +1,5 @@
 import React from 'react';
-import { Flame, MessageCircle, MapPin, Trophy } from 'lucide-react';
+import { MessageCircle, ArrowDown, MapPin, Award } from 'lucide-react';
 import { GYM_DETAILS } from '../clientData';
 
 export const HeroSection: React.FC = () => {
@@ -11,84 +11,100 @@ export const HeroSection: React.FC = () => {
   };
 
   return (
-    <section id="hero" className="hidden sm:block relative pt-4 pb-2 sm:pt-20 sm:pb-16 overflow-hidden bg-gradient-to-b from-blue-50/50 via-slate-50 to-white font-sans">
-      {/* Light Background Ambiance */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[450px] bg-blue-100/70 rounded-full blur-[120px]" />
-        <div className="absolute bottom-10 right-10 w-[450px] h-[350px] bg-amber-100/50 rounded-full blur-[120px]" />
-        <div 
-          className="absolute inset-0 opacity-[0.035]"
-          style={{
-            backgroundImage: `radial-gradient(circle at 1px 1px, #18213a 1px, transparent 0)`,
-            backgroundSize: '28px 28px',
-          }}
-        />
-      </div>
+    <section id="hero" className="relative pt-6 pb-12 sm:pt-16 sm:pb-24 border-b border-slate-200/80 bg-[#fafafa]">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-10 lg:gap-12 items-center">
+          
+          {/* Left Column: Heading, Subhead & Actions */}
+          <div className="lg:col-span-7 space-y-4 sm:space-y-6">
+            
+            {/* Context meta line */}
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs font-medium text-slate-500 tracking-normal">
+              <span className="inline-flex items-center gap-1 text-slate-700">
+                <MapPin className="w-3 h-3 text-slate-700 flex-shrink-0" />
+                <span>Warangal</span>
+              </span>
+              <span className="text-slate-300">•</span>
+              <span>Est. 2008</span>
+              <span className="text-slate-300">•</span>
+              <span className="text-slate-700">Coached by Waheed Khan</span>
+            </div>
 
-      <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center z-10">
-        {/* Championship Ribbon — Hidden on Mobile */}
-        <div className="hidden sm:inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold mb-3.5 shadow-sm">
-          <Trophy className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-          <span className="truncate">Home of Champions · Founded by Waheed Khan</span>
-        </div>
+            {/* Headline */}
+            <h1 className="text-2xl sm:text-5xl lg:text-6xl font-medium tracking-tight text-slate-900 leading-[1.12] sm:leading-[1.08]">
+              Built by champions. <br className="hidden sm:inline" />
+              Hardened in heavy iron.
+            </h1>
 
-        {/* Compact Title */}
-        <h1 className="text-2xl sm:text-4xl md:text-5xl font-black tracking-tight text-slate-900 uppercase font-sans leading-tight mb-2 sm:mb-2.5">
-          Built By Champions. <span className="text-blue-600">Forged in Iron.</span>
-        </h1>
+            {/* Subhead */}
+            <p className="max-w-xl text-xs sm:text-base text-slate-600 leading-relaxed font-normal">
+              Warangal’s premier strength and contest-prep training floor. Olympic power racks, heavy dumbbells, and direct mentorship from Mr. South India.
+            </p>
 
-        {/* Short Subtitle with Coach Waheed Khan (Warangal prefix hidden on mobile) */}
-        <p className="max-w-lg mx-auto text-xs sm:text-sm md:text-base text-slate-600 font-normal leading-relaxed mb-3 sm:mb-6">
-          <span className="hidden sm:inline">Warangal’s premier strength & bodybuilding center. </span>
-          Coached directly by Mr. South India <strong className="text-slate-900 font-semibold">Waheed Khan</strong>.
-        </p>
+            {/* Actions on Mobile: Full-width stacked buttons with 48px touch height */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 pt-1">
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="h-11 sm:h-12 px-5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs sm:text-sm flex items-center justify-center gap-2 transition-transform active:scale-[0.98] shadow-xs"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>Claim Free 1-Day Pass</span>
+              </a>
 
-        {/* Side-by-Side Action Group on Mobile & Desktop */}
-        <div className="grid grid-cols-2 gap-2 max-w-sm mx-auto sm:flex sm:flex-row sm:items-center sm:justify-center sm:gap-4 sm:max-w-none mb-0 sm:mb-12">
-          <a
-            href={whatsappUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-1 sm:gap-2 px-2.5 sm:px-5 py-2 sm:py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-sm transition-all active:scale-[0.98]"
-          >
-            <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current flex-shrink-0" />
-            <span className="truncate">Free 1-Day Pass</span>
-          </a>
+              <button
+                onClick={scrollToLeaderboard}
+                type="button"
+                className="h-11 sm:h-12 px-4 rounded-lg bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs sm:text-sm border border-slate-300 flex items-center justify-center gap-2 transition-transform active:scale-[0.98] cursor-pointer"
+              >
+                <span>View Gym Leaderboard</span>
+                <ArrowDown className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+            </div>
 
-          <button
-            onClick={scrollToLeaderboard}
-            type="button"
-            className="flex items-center justify-center gap-1 sm:gap-2 px-2.5 sm:px-5 py-2 sm:py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm shadow-sm transition-all active:scale-[0.98] cursor-pointer"
-          >
-            <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300 fill-amber-300 flex-shrink-0" />
-            <span className="truncate">Leaderboard</span>
-          </button>
-        </div>
-
-        {/* Credentials Grid — Hidden on Mobile */}
-        <div className="hidden md:grid grid-cols-4 gap-3.5 max-w-4xl mx-auto pt-4 border-t border-slate-200">
-          <div className="p-4 rounded-2xl bg-white border border-slate-200/90 text-center shadow-sm">
-            <div className="text-2xl font-black text-blue-600 font-sans">18+</div>
-            <div className="text-xs text-slate-500 mt-1 font-medium">Years of Legacy</div>
+            {/* Proof metrics row: Balanced 3-column scale */}
+            <div className="grid grid-cols-3 gap-3 sm:gap-6 pt-4 sm:pt-6 border-t border-slate-200/90 max-w-lg">
+              <div>
+                <div className="text-xl sm:text-3xl font-medium text-slate-900 tabular-nums">18+</div>
+                <div className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Years coaching</div>
+              </div>
+              <div>
+                <div className="text-xl sm:text-3xl font-medium text-slate-900 tabular-nums">8</div>
+                <div className="text-[11px] sm:text-xs text-slate-500 mt-0.5">State titles</div>
+              </div>
+              <div>
+                <div className="text-xl sm:text-3xl font-medium text-slate-900 tabular-nums">500+</div>
+                <div className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Athletes trained</div>
+              </div>
+            </div>
           </div>
-          <div className="p-4 rounded-2xl bg-white border border-slate-200/90 text-center shadow-sm">
-            <div className="text-2xl font-black text-amber-600 font-sans">8+</div>
-            <div className="text-xs text-slate-500 mt-1 font-medium">State & Zonal Titles</div>
-          </div>
-          <div className="p-4 rounded-2xl bg-white border border-slate-200/90 text-center shadow-sm">
-            <div className="text-2xl font-black text-blue-600 font-sans">500+</div>
-            <div className="text-xs text-slate-500 mt-1 font-medium">Athletes Transformed</div>
-          </div>
-          <div className="p-4 rounded-2xl bg-white border border-slate-200/90 text-center shadow-sm">
-            <div className="text-2xl font-black text-slate-900 font-sans">100%</div>
-            <div className="text-xs text-slate-500 mt-1 font-medium">Real Mentorship</div>
-          </div>
-        </div>
 
-        {/* Address badge — Hidden on Mobile */}
-        <div className="hidden sm:inline-flex mt-4 sm:mt-8 items-center gap-1.5 text-xs text-slate-500 font-medium">
-          <MapPin className="w-3 h-3 text-blue-600 flex-shrink-0" />
-          <span className="truncate">Max, Pochamma Maidan, Warangal</span>
+          {/* Right Column: Hero Visual Frame (Compact on mobile) */}
+          <div className="lg:col-span-5 flex justify-center pt-2 sm:pt-0">
+            <div className="relative w-full max-w-sm sm:max-w-md rounded-xl sm:rounded-2xl overflow-hidden border border-slate-200/90 bg-slate-900 shadow-xs">
+              <img
+                src="/coach-hero.jpg"
+                alt="Coach Waheed Khan at Iron Gym"
+                className="w-full h-[250px] sm:h-[460px] object-cover object-top opacity-95"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none" />
+              
+              <div className="absolute bottom-3 left-3 right-3 sm:bottom-4 sm:left-4 sm:right-4 text-white">
+                <div className="flex items-center gap-1.5 text-[10px] sm:text-xs font-mono text-amber-300/90 mb-0.5">
+                  <Award className="w-3 h-3 text-amber-300" />
+                  <span>MR. SOUTH INDIA GOLD</span>
+                </div>
+                <div className="text-sm sm:text-lg font-medium text-white tracking-normal">
+                  Waheed Khan
+                </div>
+                <div className="text-[10px] sm:text-xs text-slate-300">
+                  Head Coach & Founder, Iron Gym Warangal
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </section>

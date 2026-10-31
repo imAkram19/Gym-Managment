@@ -5,25 +5,23 @@ import { ClockDisplay } from './ClockDisplay';
 import { NotifBell } from './NotifBell';
 import { CommandBar } from './CommandBar';
 import { useKeyboardShortcut } from '../../../hooks/useKeyboardShortcut';
-import { getBiometricDevices } from '../../../lib/api/biometrics';
 import type { BiometricDevice } from '../../../types';
+
+import { useBiometricDeviceStatus } from '../../../hooks/useBiometricDeviceStatus';
 
 // ── TOPBAR V2 — thin wrapper, delegates to subcomponents ──────
 // master plan §2.1: extracted NotifBell + ClockDisplay, no more 22KB monolith
 // backdrop-blur only on fixed/sticky — performance guardrail from both skills
 
-function formatLastPing(lastPing: string | undefined): string {
-  if (!lastPing) return 'Never';
-  const diffMs = Date.now() - new Date(lastPing).getTime();
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  return `${Math.floor(mins / 60)}h ago`;
-}
-
 export const TopBar: React.FC = () => {
-  const [devices, setDevices] = useState<BiometricDevice[]>([]);
-  const [, setTick] = useState(0);
+  const {
+    devices: uniqueDevices,
+    primaryDevice,
+    isPrimaryOnline,
+    offlineCount,
+    formatLastPing,
+  } = useBiometricDeviceStatus();
+  const primaryIsOffline = !isPrimaryOnline;
   const [showTroubleshooting, setShowTroubleshooting] = useState(false);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
 
@@ -33,57 +31,11 @@ export const TopBar: React.FC = () => {
     ignoreInputs: false,
   });
 
-  // Poll devices every 60s
-  useEffect(() => {
-    const fetchDevices = async () => {
-      try {
-        const data = await getBiometricDevices();
-        setDevices(data);
-      } catch { /* silently fail */ }
-    };
-    fetchDevices();
-    const interval = setInterval(fetchDevices, 60_000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Refresh "X min ago" display every minute
-  useEffect(() => {
-    const tick = setInterval(() => setTick(t => t + 1), 60_000);
-    return () => clearInterval(tick);
-  }, []);
-
   const handleLogout = () => {
     sessionStorage.removeItem('irongym_logged_in');
     localStorage.removeItem('irongym_owner_access');
     window.location.reload();
   };
-
-  // Dedup devices
-  const OFFLINE_STALE = 10 * 60 * 1000;
-  const uniqueDevicesMap = new Map<string, BiometricDevice>();
-  for (const d of devices) {
-    const key = `${d.name}-${d.ipAddress}-${d.port}`;
-    const existing = uniqueDevicesMap.get(key);
-    if (!existing) {
-      uniqueDevicesMap.set(key, d);
-    } else {
-      const newTime = d.lastPing ? new Date(d.lastPing).getTime() : 0;
-      const existTime = existing.lastPing ? new Date(existing.lastPing).getTime() : 0;
-      if (d.status === 'online' && existing.status !== 'online') {
-        uniqueDevicesMap.set(key, d);
-      } else if (newTime > existTime) {
-        uniqueDevicesMap.set(key, d);
-      }
-    }
-  }
-  const uniqueDevices = Array.from(uniqueDevicesMap.values());
-  const offlineDevices = uniqueDevices.filter(d => {
-    if (d.status === 'offline') return true;
-    if (!d.lastPing) return true;
-    return Date.now() - new Date(d.lastPing).getTime() > OFFLINE_STALE;
-  });
-  const primaryDevice = uniqueDevices.find(d => !offlineDevices.some(o => o.id === d.id)) ?? uniqueDevices[0] ?? null;
-  const primaryIsOffline = primaryDevice ? offlineDevices.some(d => d.id === primaryDevice.id) : false;
 
   return (
     <>
@@ -101,7 +53,7 @@ export const TopBar: React.FC = () => {
               devices={uniqueDevices}
               primaryDevice={primaryDevice}
               primaryIsOffline={primaryIsOffline}
-              offlineCount={offlineDevices.length}
+              offlineCount={offlineCount}
               onOfflineClick={() => setShowTroubleshooting(true)}
               formatLastPing={formatLastPing}
             />

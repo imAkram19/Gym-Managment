@@ -2,6 +2,7 @@ import React from 'react';
 import { Users, UserCheck, AlertTriangle, Fingerprint } from 'lucide-react';
 import { StatCard } from '../ui/StatCard';
 import type { BiometricDevice } from '../../types';
+import { isBiometricDeviceOnline } from '../../lib/api/biometrics';
 import { clsx } from 'clsx';
 
 interface LiveHUDProps {
@@ -9,6 +10,7 @@ interface LiveHUDProps {
   expiringSoonCount: number;
   activeMembersCount: number;
   primaryDevice?: BiometricDevice | null;
+  isDeviceOnline?: boolean;
   onExpiringClick?: () => void;
   onActiveClick?: () => void;
   onAttendanceClick?: () => void;
@@ -19,11 +21,15 @@ export const LiveHUD: React.FC<LiveHUDProps> = ({
   expiringSoonCount,
   activeMembersCount,
   primaryDevice,
+  isDeviceOnline: propIsDeviceOnline,
   onExpiringClick,
   onActiveClick,
   onAttendanceClick,
 }) => {
-  const isDeviceOnline = primaryDevice?.status === 'online';
+  const isDeviceOnline =
+    propIsDeviceOnline !== undefined
+      ? propIsDeviceOnline
+      : isBiometricDeviceOnline(primaryDevice);
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

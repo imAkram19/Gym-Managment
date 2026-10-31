@@ -1,6 +1,7 @@
 import React from 'react';
 import { RefreshCw, Trash2 } from 'lucide-react';
 import { Badge } from '../ui/Badge';
+import { isBiometricDeviceOnline } from '../../lib/api/biometrics';
 import type { BiometricDevice } from '../../types';
 import { clsx } from 'clsx';
 
@@ -21,7 +22,7 @@ export const DeviceStatusPanel: React.FC<DeviceStatusPanelProps> = ({
   onDelete,
   isRefreshing = false,
 }) => {
-  const isOnline = device.status === 'online';
+  const isOnline = isBiometricDeviceOnline(device);
 
   const formatLastPing = (iso?: string) => {
     if (!iso) return 'Never';
